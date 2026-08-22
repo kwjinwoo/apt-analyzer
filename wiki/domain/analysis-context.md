@@ -3,7 +3,7 @@ title: Analysis Context
 type: domain
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-22
 aliases:
   - Metric context
   - Analysis configuration
@@ -57,7 +57,7 @@ The context establishes reproducibility but does not make incompatible evidence 
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When results exist, verify that context is represented at the domain boundary, preserved through interfaces and exports, and asserted by representative acceptance tests.
+[`AnalysisContext`](../../src/apt_analyzer/domain.py) represents the subject, inclusive period, area selection, and transaction inclusion policy. [`TransactionVolumeResult`](../../src/apt_analyzer/analytics.py) retains that context, as verified by [`test_transaction_volume.py`](../../tests/test_transaction_volume.py). Interface, export, and metric-specific context evidence remain absent.
 
 ## Related pages
 

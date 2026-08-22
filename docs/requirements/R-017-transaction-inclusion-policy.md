@@ -4,7 +4,7 @@ title: Transaction inclusion policy
 status: accepted
 priority: P1
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 origin: "Initial requirements R15"
 supersedes: []
 superseded_by: null
@@ -44,7 +44,9 @@ The system identifies cancelled, direct, and brokered transactions and applies a
 
 ### Automated
 
-Not established yet.
+- [`test_domain_values_represent_source_independent_analysis_context`](../../tests/test_domain.py) covers normalized cancellation and transaction-type representation for AC-1 and AC-2.
+- [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers AC-3 through AC-5 for transaction volume.
+- [`test_transaction_volume_distinguishes_valid_empty_population`](../../tests/test_transaction_volume.py) covers the valid-empty-result constraint.
 
 ### Manual or data validation
 
@@ -52,7 +54,7 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-5 have no implementation evidence yet.
+- Source-adapter normalization and non-volume metric propagation are not established yet.
 
 ## Open questions
 

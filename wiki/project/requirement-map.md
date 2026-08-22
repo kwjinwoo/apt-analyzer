@@ -3,7 +3,7 @@ title: Requirement Map
 type: project
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-22
 aliases:
   - Requirement knowledge graph
 tags:
@@ -72,7 +72,7 @@ The arrows express knowledge dependency, not implementation order or control flo
 
 ## Verify in the repository
 
-No implementation evidence exists yet. As tests appear, representative evidence remains linked from each Requirement document rather than duplicated in this map.
+Initial domain and transaction-volume evidence is linked from R-003, R-006, R-017, and R-019. Representative evidence remains linked from each Requirement document rather than duplicated in this map.
 
 ## Related pages
 

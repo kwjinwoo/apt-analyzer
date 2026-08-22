@@ -3,7 +3,7 @@ title: Apartment Identity
 type: domain
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-22
 aliases:
   - Complex identity
   - Internal apartment ID
@@ -54,7 +54,7 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When identity resolution is implemented, verify the matching boundary, ambiguity result, real-source validation cases, and representative comparison tests in the current code and test suite.
+[`Apartment`](../../src/apt_analyzer/domain.py) provides a source-independent internal ID and display name for the analysis boundary, and [`test_domain.py`](../../tests/test_domain.py) verifies its use in analysis context. Identity resolution, ambiguity results, and real-source validation remain unimplemented.
 
 ## Related pages
 

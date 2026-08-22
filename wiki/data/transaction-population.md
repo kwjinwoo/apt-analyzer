@@ -3,7 +3,7 @@ title: Transaction Population
 type: data
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-22
 aliases:
   - Eligible transactions
   - Analysis population
@@ -58,7 +58,7 @@ Cancelled transactions are excluded from the default analytical population but r
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When implemented, verify filter composition, immutable normalized records, raw-versus-eligible counts, explicit empty and failure results, and shared-population tests across metrics.
+[`transaction_volume`](../../src/apt_analyzer/analytics.py) composes apartment, period, area, cancellation, and transaction-type conditions over immutable normalized records. [`test_transaction_volume.py`](../../tests/test_transaction_volume.py) verifies raw-versus-eligible counts and a valid empty population without external API access. Acquisition and parsing failures and shared-population behavior across other metrics remain unimplemented.
 
 ## Related pages
 

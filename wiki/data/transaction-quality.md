@@ -3,7 +3,7 @@ title: Transaction Quality
 type: data
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-22
 aliases:
   - Transaction data quality
 tags:
@@ -55,7 +55,7 @@ Direct transactions and unusual prices require inspection because they can alter
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When acquisition exists, verify response preservation, normalization fixtures, cancellation corrections, duplicate behavior, explicit failures, cache freshness, and manual comparison with at least three real complexes.
+[`NormalizedTransaction`](../../src/apt_analyzer/domain.py) provides immutable decimal-area, integer-price, transaction-type, and cancellation representations. [`test_domain.py`](../../tests/test_domain.py) verifies their source-independent use. Acquisition, source traceability, normalization fixtures, corrections, duplicates, failures, and cache freshness remain unimplemented.
 
 ## Related pages
 

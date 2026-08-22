@@ -4,7 +4,7 @@ title: Area-filtered analysis
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 origin: "Initial requirements R6"
 supersedes: []
 superseded_by: null
@@ -42,7 +42,8 @@ The user can select all areas or one discovered area group, and the selection is
 
 ### Automated
 
-Not established yet.
+- [`test_all_area_selection_includes_any_raw_area`](../../tests/test_domain.py) covers the domain contract for AC-1.
+- [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers AC-2 and AC-4 for transaction volume.
 
 ### Manual or data validation
 
@@ -50,7 +51,8 @@ None.
 
 ### Verification gaps
 
-- AC-1 through AC-5 have no implementation evidence yet.
+- AC-3 remains unverified across price summaries, retention, and MDD.
+- AC-5 remains unverified until turnover output exists.
 
 ## Open questions
 

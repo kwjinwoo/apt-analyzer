@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Python quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.9"
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Sync locked development environment
+        run: uv sync --locked --all-groups
+
+      - name: Verify lockfile
+        run: uv lock --check
+
+      - name: Check formatting
+        run: uv run --locked ruff format --check .
+
+      - name: Lint Python
+        run: uv run --locked ruff check .
+
+      - name: Type-check Python
+        run: uv run --locked pyright
+
+      - name: Run tests
+        run: uv run --locked pytest
+
+      - name: Run repository hooks
+        run: uv run --locked pre-commit run --all-files

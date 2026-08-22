@@ -3,7 +3,7 @@ title: Area Group
 type: domain
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-22
 aliases:
   - Exclusive-area group
   - Area classification
@@ -56,7 +56,7 @@ The grouping policy must remain replaceable and independently testable. Integer-
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When grouping exists, verify raw-area preservation, deterministic classification, replaceable policy boundaries, area-filter propagation, and real-complex distribution tests.
+[`AreaGroup` and `AreaSelection`](../../src/apt_analyzer/domain.py) represent explicit groups and all-or-group selections without choosing a grouping algorithm. [`test_domain.py`](../../tests/test_domain.py) verifies raw-area preservation and selection behavior. Classification-policy and real-complex distribution evidence do not exist yet.
 
 ## Related pages
 

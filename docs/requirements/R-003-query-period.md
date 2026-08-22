@@ -4,7 +4,7 @@ title: Transaction query period
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 origin: "Initial requirements R3"
 supersedes: []
 superseded_by: null
@@ -41,7 +41,8 @@ The user can specify the start and end dates for transaction retrieval and analy
 
 ### Automated
 
-Not established yet.
+- [`test_analysis_period_rejects_reversed_boundaries`](../../tests/test_domain.py) covers AC-3.
+- [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers AC-1, AC-2, and AC-4 at the domain-analytics boundary.
 
 ### Manual or data validation
 
@@ -49,7 +50,7 @@ None.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- Retrieval-adapter and user-interface coverage is not established yet.
 
 ## Open questions
 

@@ -3,7 +3,7 @@ title: MVP Knowledge Map
 type: project
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-22
 aliases:
   - MVP dependency map
 tags:
@@ -69,7 +69,7 @@ The dependency order explains why product UI is deferred until data and metric s
 
 ## Verify in the repository
 
-No implementation evidence exists yet. As milestones are implemented, verify each dependency boundary and an end-to-end acceptance path without relying on prose descriptions of current behavior.
+Initial foundation evidence exists in the source-independent values in [`domain.py`](../../src/apt_analyzer/domain.py) and the pure transaction-volume boundary in [`analytics.py`](../../src/apt_analyzer/analytics.py). Representative tests are in [`test_domain.py`](../../tests/test_domain.py) and [`test_transaction_volume.py`](../../tests/test_transaction_volume.py). Acquisition, identity resolution, normalization adapters, the remaining metrics, and an end-to-end acceptance path remain unimplemented.
 
 ## Related pages
 

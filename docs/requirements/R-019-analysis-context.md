@@ -4,7 +4,7 @@ title: Visible analysis context
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 origin: "Initial requirements R17"
 supersedes: []
 superseded_by: null
@@ -44,7 +44,8 @@ The user can inspect the analysis conditions used to produce every result.
 
 ### Automated
 
-Not established yet.
+- [`test_domain_values_represent_source_independent_analysis_context`](../../tests/test_domain.py) covers the domain representation for AC-1, AC-2, and AC-5.
+- [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers retention of that context on a machine-readable transaction-volume result for AC-7.
 
 ### Manual or data validation
 
@@ -52,7 +53,8 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-7 have no implementation evidence yet.
+- AC-3, AC-4, and AC-6 remain unverified until their metric-specific results exist.
+- Human-readable and exported result forms are not established yet.
 
 ## Open questions
 
