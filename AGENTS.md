@@ -21,6 +21,14 @@ Before changing code:
 
 Do not read all Docs or Wiki pages by default. Build scoped context and expand only when a relevant link, conflict, or uncertainty requires it.
 
+## Sol-Luna delegation
+
+- The primary agent, Sol, owns user discussion, requirements clarification, consequential decisions, and final acceptance.
+- When the user has explicitly approved a concrete direction and only bounded implementation, tests, documentation, and verification remain, invoke the repository `$handoff-to-luna` skill and delegate the work to the `luna_worker` custom agent.
+- Do not delegate while material requirements, architecture, data policy, scope, or authorization remain unresolved.
+- Use only one write-capable Luna agent at a time. Sol must not edit overlapping files while Luna is working.
+- Luna must return ambiguity or source conflicts to Sol instead of deciding them. Sol reviews Luna's diff and validation evidence before reporting completion to the user.
+
 ## Development workflow
 
 - Develop behavior changes using test-driven development.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Handoff to Luna"
+  short_description: "Delegate agreed implementation work to Luna"
+  default_prompt: "Use $handoff-to-luna to delegate the agreed implementation and documentation work to Luna."
