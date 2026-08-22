@@ -1,0 +1,4 @@
+interface:
+  display_name: "Query Project Wiki"
+  short_description: "Fetch scoped context from the project knowledge graph"
+  default_prompt: "Use $query-project-wiki to gather scoped project context before investigating the codebase."
