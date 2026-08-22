@@ -1,0 +1,17 @@
+{
+  "description": "Require a current Docs and Wiki impact review before an agent turn completes.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'repo_root=$(git rev-parse --show-toplevel) && python3 \"$repo_root/.codex/hooks/knowledge_gate.py\"'",
+            "timeout": 30,
+            "statusMessage": "Checking Docs and Wiki impact"
+          }
+        ]
+      }
+    ]
+  }
+}
