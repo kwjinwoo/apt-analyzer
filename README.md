@@ -4,6 +4,10 @@ A data-driven toolkit for analyzing apartment complexes using public real-estate
 
 The project starts with **transaction liquidity** and **price resilience** as its first analysis domain, but is designed to expand into broader apartment-complex analysis over time.
 
+## Documentation
+
+Start with the [documentation index](docs/index.md) for product requirements, domain definitions, architectural intent, decisions, open questions, and the outcome-oriented roadmap. Use the [LLM-maintained wiki](wiki/index.md) to navigate relationships among those sources. Current behavior must be verified in code and tests.
+
 ## Current Focus
 
 The initial goal is to answer a simple question:
