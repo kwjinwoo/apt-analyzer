@@ -8,6 +8,16 @@ The project starts with **transaction liquidity** and **price resilience** as it
 
 Start with the [documentation index](docs/index.md) for product requirements, domain definitions, architectural intent, decisions, open questions, and the outcome-oriented roadmap. Use the [LLM-maintained wiki](wiki/index.md) to navigate relationships among those sources. Current behavior must be verified in code and tests.
 
+## Official Data Key
+
+Set the data.go.kr Encoding key in the repository-root `.env`:
+
+```dotenv
+DATA_GO_KR_SERVICE_KEY=your_percent_encoded_key
+```
+
+The environment variable takes precedence. The key is already percent-encoded and the client preserves it exactly once. Never commit `.env` or print credential-bearing request URLs.
+
 ## Current Focus
 
 The initial goal is to answer a simple question:

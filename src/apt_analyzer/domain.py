@@ -110,6 +110,14 @@ class NormalizedTransaction:
     exclusive_area_sqm: Decimal
     transaction_type: TransactionType
     is_cancelled: bool
+    floor: int | None = None
+    building: str | None = None
+    unit: str | None = None
+    construction_year: int | None = None
+    broker_location: str | None = None
+    source_name: str | None = None
+    source_record_id: str | None = None
+    source_values: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         """Reject normalized records with invalid required domain values."""

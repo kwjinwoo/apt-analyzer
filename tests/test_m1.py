@@ -1,0 +1,116 @@
+from datetime import date
+from decimal import Decimal
+
+from apt_analyzer.acquisition import DataGoKrClient
+from apt_analyzer.domain import AnalysisPeriod, Apartment, TransactionType
+from apt_analyzer.m1 import (
+    ApartmentCandidate,
+    M1Service,
+    ResolutionStatus,
+    months,
+    normalize_transaction,
+    resolve_candidate,
+)
+
+
+def test_normalization_preserves_required_optional_and_source_values() -> None:
+    row = {
+        "dealYear": "2025",
+        "dealMonth": "1",
+        "dealDay": "7",
+        "dealAmount": "90,000",
+        "excluUseAr": "84.92",
+        "floor": "12",
+        "dealingGbn": "중개거래",
+        "cdealType": "O",
+        "aptDong": "101",
+        "buildYear": "2005",
+        "estateAgentSggNm": "서울 종로구",
+        "aptSeq": "x-1",
+    }
+
+    transaction = normalize_transaction(row, "apt-1")
+
+    assert transaction.contract_date == date(2025, 1, 7)
+    assert transaction.price_krw == 900_000_000
+    assert transaction.exclusive_area_sqm == Decimal("84.92")
+    assert transaction.floor == 12
+    assert transaction.transaction_type is TransactionType.BROKERED
+    assert transaction.is_cancelled is True
+    assert transaction.building == "101"
+    assert transaction.unit == "x-1"
+    assert transaction.construction_year == 2005
+    assert transaction.broker_location == "서울 종로구"
+    assert dict(transaction.source_values)["dealAmount"] == "90,000"
+
+
+def test_resolution_never_auto_selects_ambiguous_candidates() -> None:
+    candidates = tuple(
+        ApartmentCandidate(str(index), "현대", f"11{index}", f"주소 {index}", "")
+        for index in range(2)
+    )
+    assert resolve_candidate(candidates).status is ResolutionStatus.AMBIGUOUS
+    assert resolve_candidate(candidates).apartment is None
+
+
+def test_month_coverage_includes_partial_boundary_months() -> None:
+    assert months(AnalysisPeriod(date(2024, 12, 31), date(2025, 2, 1))) == (
+        "202412",
+        "202501",
+        "202502",
+    )
+
+
+def test_retrieval_is_idempotent_and_enforces_date_boundaries() -> None:
+    xml = b"""<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>
+      <body><items>
+       <item><aptNm>Example</aptNm><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>1,000</dealAmount><excluUseAr>84.9</excluUseAr><floor>1</floor></item>
+       <item><aptNm>Example</aptNm><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>1,000</dealAmount><excluUseAr>84.9</excluUseAr><floor>1</floor></item>
+       <item><aptNm>Example</aptNm><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>1,100</dealAmount><excluUseAr>84.9</excluUseAr><floor>2</floor></item>
+      </items><totalCount>3</totalCount></body></response>"""
+    client = DataGoKrClient("encoded", transport=lambda _url, _timeout: xml)
+    service = M1Service(client)
+    candidate = ApartmentCandidate("k1", "Example", "1111010100", "서울 종로구 1", "")
+
+    result = service.retrieve(
+        candidate, Apartment("apt-1", "Example"), AnalysisPeriod(date(2025, 1, 2), date(2025, 1, 2))
+    )
+
+    assert len(result) == 1
+    assert result[0].contract_date == date(2025, 1, 2)
+
+
+def test_cache_result_cannot_masquerade_as_live() -> None:
+    calls = 0
+
+    def transport(_url: str, _timeout: float) -> bytes:
+        nonlocal calls
+        calls += 1
+        return b"<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header><body><items/></body></response>"
+
+    client = DataGoKrClient("encoded", transport=transport)
+    first = client.get_xml("https://example.test", {"q": "1"}, source="test")
+    second = client.get_xml("https://example.test", {"q": "1"}, source="test")
+    assert first.from_cache is False
+    assert second.from_cache is True
+    assert second.fetched_at == first.fetched_at
+    assert second.query == (("q", "1"),)
+    assert calls == 1
+
+
+def test_search_uses_correct_kapt_operation_and_region_evidence() -> None:
+    xml = b"""<response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header>
+      <body><items><item><kaptCode>A1</kaptCode><kaptName>Hyundai</kaptName><as1>Seoul</as1><as2>Jongno</as2><as3>Cheongun</as3></item></items></body></response>"""
+    seen = ""
+
+    def transport(url: str, _timeout: float) -> bytes:
+        nonlocal seen
+        seen = url
+        return xml
+
+    service = M1Service(DataGoKrClient("abc%2Fdef", transport=transport))
+    candidates = service.search("Hyundai")
+    assert "getSidoAptList3" in seen
+    assert "sidoCode=11" in seen
+    assert "serviceKey=abc%2Fdef" in seen
+    assert candidates[0].lot_address == "Seoul Jongno Cheongun"

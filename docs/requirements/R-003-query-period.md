@@ -43,6 +43,7 @@ The user can specify the start and end dates for transaction retrieval and analy
 
 - [`test_analysis_period_rejects_reversed_boundaries`](../../tests/test_domain.py) covers AC-3.
 - [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers AC-1, AC-2, and AC-4 at the domain-analytics boundary.
+- [`test_month_coverage_includes_partial_boundary_months`](../../tests/test_m1.py) and [`test_retrieval_is_idempotent_and_enforces_date_boundaries`](../../tests/test_m1.py) cover retrieval boundaries.
 
 ### Manual or data validation
 
@@ -50,7 +51,7 @@ None.
 
 ### Verification gaps
 
-- Retrieval-adapter and user-interface coverage is not established yet.
+- User-interface coverage is not established yet.
 
 ## Open questions
 

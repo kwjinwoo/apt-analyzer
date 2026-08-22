@@ -9,7 +9,7 @@ origin: "Initial requirements R1"
 supersedes: []
 superseded_by: null
 related_requirements: [R-002]
-related_decisions: []
+related_decisions: [ADR-0003]
 ---
 
 # R-001: Apartment search
@@ -42,7 +42,8 @@ The user can search for an apartment complex by name, distinguish ambiguous resu
 
 ### Automated
 
-Not established yet.
+- [`test_resolution_never_auto_selects_ambiguous_candidates`](../../tests/test_m1.py) covers AC-3 and AC-4.
+- [`test_search_uses_correct_kapt_operation_and_region_evidence`](../../tests/test_m1.py) covers AC-1 and AC-2.
 
 ### Manual or data validation
 
@@ -50,7 +51,7 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- Automated evidence uses deterministic fixtures. Live K-APT list validation covers ambiguous-name discovery, but AC-3 remains incomplete end to end because the detail operation needed for legal-dong and full-address linkage is not authorized for the configured key.
 
 ## Open questions
 

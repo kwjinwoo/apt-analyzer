@@ -43,7 +43,7 @@ Direct transactions and unusual prices require inspection because they can alter
 
 - [OQ-006: Default direct-transaction policy](../../docs/open-questions.md#oq-006-default-direct-transaction-policy)
 - [OQ-007: Outlier comparison policy](../../docs/open-questions.md#oq-007-outlier-comparison-policy)
-- Source selection, duplicate identity, cache freshness, and retry policy still require implementation-time evidence or decisions.
+- [ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) proposes the official sources and initial duplicate, cache provenance, retry, and identity policies; identity linkage remains unaccepted pending detail-source access.
 
 ## Evidence and interpretation risks
 
@@ -55,7 +55,7 @@ Direct transactions and unusual prices require inspection because they can alter
 
 ## Verify in the repository
 
-[`NormalizedTransaction`](../../src/apt_analyzer/domain.py) provides immutable decimal-area, integer-price, transaction-type, and cancellation representations. [`test_domain.py`](../../tests/test_domain.py) verifies their source-independent use. Acquisition, source traceability, normalization fixtures, corrections, duplicates, failures, and cache freshness remain unimplemented.
+[`NormalizedTransaction`](../../src/apt_analyzer/domain.py) preserves normalized values and source traceability. [`DataGoKrClient`](../../src/apt_analyzer/acquisition.py) exposes outcomes, bounded retries, and cache provenance; [`test_acquisition.py`](../../tests/test_acquisition.py) and [`test_m1.py`](../../tests/test_m1.py) verify encoded-key handling, empty data, normalization, exact-row deduplication, and cache visibility.
 
 ## Related pages
 

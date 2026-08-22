@@ -9,7 +9,7 @@ origin: "Initial requirements R2"
 supersedes: []
 superseded_by: null
 related_requirements: [R-001, R-003, R-017]
-related_decisions: []
+related_decisions: [ADR-0003]
 ---
 
 # R-002: Sale transaction retrieval
@@ -43,7 +43,9 @@ The system can retrieve and normalize apartment sale transactions for a selected
 
 ### Automated
 
-Not established yet.
+- [`test_normalization_preserves_required_optional_and_source_values`](../../tests/test_m1.py) covers AC-1 through AC-3.
+- [`test_retrieval_is_idempotent_and_enforces_date_boundaries`](../../tests/test_m1.py) covers AC-4.
+- [`test_valid_empty_xml_is_distinct_from_failure`](../../tests/test_acquisition.py) covers the valid-empty side of AC-5.
 
 ### Manual or data validation
 
@@ -51,7 +53,7 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-5 have no implementation evidence yet.
+- Automated evidence uses deterministic fixtures. Live transaction retrieval and a manual three-name source intersection succeeded, but selected K-APT candidates cannot yet be linked to MOLIT queries using the required legal-dong and full-address evidence.
 
 ## Open questions
 

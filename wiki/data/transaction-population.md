@@ -58,7 +58,7 @@ Cancelled transactions are excluded from the default analytical population but r
 
 ## Verify in the repository
 
-[`transaction_volume`](../../src/apt_analyzer/analytics.py) composes apartment, period, area, cancellation, and transaction-type conditions over immutable normalized records. [`test_transaction_volume.py`](../../tests/test_transaction_volume.py) verifies raw-versus-eligible counts and a valid empty population without external API access. Acquisition and parsing failures and shared-population behavior across other metrics remain unimplemented.
+[`transaction_volume`](../../src/apt_analyzer/analytics.py) composes apartment, period, area, cancellation, and transaction-type conditions. [`M1Service.retrieve`](../../src/apt_analyzer/m1.py) covers inclusive acquisition dates and exact-row deduplication. Representative coverage is in [`test_transaction_volume.py`](../../tests/test_transaction_volume.py) and [`test_m1.py`](../../tests/test_m1.py); shared-population behavior across other metrics remains unimplemented.
 
 ## Related pages
 
