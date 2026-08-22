@@ -22,7 +22,7 @@ Apartment identity is the relationship between a real apartment complex, source-
 
 A display name cannot establish identity because names can be duplicated, normalized differently, or changed. Transaction and apartment-metadata sources may also lack a shared canonical identifier. Identity resolution therefore sits between source acquisition and every downstream population or comparison.
 
-[ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) proposes K-APT source ID plus legal-dong, address, and normalized-name values as initial evidence. Only an explicitly selected single candidate should receive a project identity; sparse or ambiguous evidence must never become an automatic cross-source match.
+[ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) accepts K-APT source ID plus legal-dong, address, and normalized-name values as initial evidence. Only an explicitly selected single candidate receives a project identity; sparse or ambiguous evidence never becomes an automatic cross-source match.
 
 An identity error has a larger blast radius than an ordinary parsing error: it can merge transactions from different complexes, fragment one complex, attach the wrong household denominator, and invalidate comparisons while still producing plausible metrics.
 
@@ -42,7 +42,7 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 ## Decisions and open questions
 
 - [OQ-001: Stable apartment identity](../../docs/open-questions.md#oq-001-stable-apartment-identity)
-- ADR-0003 remains proposed and OQ-001 remains unresolved because the K-APT detail operation needed for end-to-end linkage currently returns HTTP 403 for the configured key.
+- ADR-0003 resolves OQ-001 for the initial version; renamed-complex continuity remains a limitation.
 
 ## Evidence and interpretation risks
 
@@ -54,7 +54,7 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 
 ## Verify in the repository
 
-[`ApartmentCandidate`, `resolve_candidate`, and `M1Service.search`](../../src/apt_analyzer/m1.py) implement the deterministic boundary. [`test_m1.py`](../../tests/test_m1.py) verifies fixture-based ambiguity and location evidence. Partial live validation on 2026-08-22 found 262 Seoul candidates for `현대` and manually cross-checked K-APT names with MOLIT January 2025 trades for 구의현대2단지, 구의현대6단지, and 현대3; it did not validate legal-dong/full-address linkage.
+[`ApartmentCandidate`, `M1Service.resolve`, and `M1Service.retrieve`](../../src/apt_analyzer/m1.py) implement enrichment and evidence matching. [`test_m1.py`](../../tests/test_m1.py) verifies ambiguity, resolution, and mismatch rejection. Opt-in live validation on 2026-08-22 found 262 Seoul candidates for `현대`, then resolved and retrieved 구의현대2단지, 구의현대6단지, and 현대3 using K-APT legal-dong and full-address evidence.
 
 ## Related pages
 

@@ -43,7 +43,7 @@ Direct transactions and unusual prices require inspection because they can alter
 
 - [OQ-006: Default direct-transaction policy](../../docs/open-questions.md#oq-006-default-direct-transaction-policy)
 - [OQ-007: Outlier comparison policy](../../docs/open-questions.md#oq-007-outlier-comparison-policy)
-- [ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) proposes the official sources and initial duplicate, cache provenance, retry, and identity policies; identity linkage remains unaccepted pending detail-source access.
+- [ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) accepts the official sources and initial duplicate, cache provenance, retry, and identity policies.
 
 ## Evidence and interpretation risks
 

@@ -17,4 +17,4 @@ Once accepted, an ADR preserves the decision made at that time. Correcting wordi
 |---|---|---|---|
 | [ADR-0001](ADR-0001-documentation-policy.md) | Documentation as context and navigation | accepted | 2026-08-21 |
 | [ADR-0002](ADR-0002-python-development-toolchain.md) | Python development toolchain | accepted | 2026-08-22 |
-| [ADR-0003](ADR-0003-official-sources-and-apartment-identity.md) | Official sources and apartment identity | proposed | 2026-08-22 |
+| [ADR-0003](ADR-0003-official-sources-and-apartment-identity.md) | Official sources and apartment identity | accepted | 2026-08-22 |

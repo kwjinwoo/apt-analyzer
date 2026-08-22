@@ -1,16 +1,43 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from apt_analyzer.acquisition import DataGoKrClient
 from apt_analyzer.domain import AnalysisPeriod, Apartment, TransactionType
 from apt_analyzer.m1 import (
     ApartmentCandidate,
+    IdentityMismatchError,
     M1Service,
     ResolutionStatus,
     months,
     normalize_transaction,
     resolve_candidate,
 )
+
+
+def test_selected_candidate_is_enriched_from_kapt_detail_before_resolution() -> None:
+    detail = """<response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header><body><item><kaptCode>A14383205</kaptCode><kaptName>구의현대2단지</kaptName><bjdCode>1121510300</bjdCode><kaptAddr>서울특별시 광진구 구의동 611</kaptAddr><doroJuso>서울특별시 광진구 광나루로56길 32</doroJuso></item></body></response>""".encode()
+    seen = ""
+
+    def transport(url: str, _timeout: float) -> bytes:
+        nonlocal seen
+        seen = url
+        return detail
+
+    service = M1Service(DataGoKrClient("abc%2Fdef", transport=transport))
+    selected = ApartmentCandidate("A14383205", "구의현대2단지", "", "서울 광진구", "")
+
+    enriched, resolution = service.resolve(selected)
+
+    assert "AptBasisInfoServiceV4/getAphusBassInfoV4" in seen
+    assert "kaptCode=A14383205" in seen
+    assert enriched.legal_dong_code == "1121510300"
+    assert enriched.lot_address.endswith("구의동 611")
+    assert enriched.road_address.endswith("광나루로56길 32")
+    assert resolution.status is ResolutionStatus.RESOLVED
+    assert resolution.apartment is not None
+    assert resolution.apartment.internal_id.startswith("apt-")
 
 
 def test_normalization_preserves_required_optional_and_source_values() -> None:
@@ -62,15 +89,15 @@ def test_month_coverage_includes_partial_boundary_months() -> None:
 
 
 def test_retrieval_is_idempotent_and_enforces_date_boundaries() -> None:
-    xml = b"""<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>
+    xml = """<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>
       <body><items>
-       <item><aptNm>Example</aptNm><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>1,000</dealAmount><excluUseAr>84.9</excluUseAr><floor>1</floor></item>
-       <item><aptNm>Example</aptNm><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>1,000</dealAmount><excluUseAr>84.9</excluUseAr><floor>1</floor></item>
-       <item><aptNm>Example</aptNm><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>1,100</dealAmount><excluUseAr>84.9</excluUseAr><floor>2</floor></item>
-      </items><totalCount>3</totalCount></body></response>"""
+       <item><aptNm>Example</aptNm><umdNm>청운동</umdNm><jibun>1</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>1,000</dealAmount><excluUseAr>84.9</excluUseAr><floor>1</floor></item>
+       <item><aptNm>Example</aptNm><umdNm>청운동</umdNm><jibun>1</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>1,000</dealAmount><excluUseAr>84.9</excluUseAr><floor>1</floor></item>
+       <item><aptNm>Example</aptNm><umdNm>청운동</umdNm><jibun>1</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>1,100</dealAmount><excluUseAr>84.9</excluUseAr><floor>2</floor></item>
+      </items><totalCount>3</totalCount></body></response>""".encode()
     client = DataGoKrClient("encoded", transport=lambda _url, _timeout: xml)
     service = M1Service(client)
-    candidate = ApartmentCandidate("k1", "Example", "1111010100", "서울 종로구 1", "")
+    candidate = ApartmentCandidate("k1", "Example", "1111010100", "서울 종로구 청운동 1", "road")
 
     result = service.retrieve(
         candidate, Apartment("apt-1", "Example"), AnalysisPeriod(date(2025, 1, 2), date(2025, 1, 2))
@@ -78,6 +105,28 @@ def test_retrieval_is_idempotent_and_enforces_date_boundaries() -> None:
 
     assert len(result) == 1
     assert result[0].contract_date == date(2025, 1, 2)
+
+
+def test_retrieval_uses_legal_code_and_rejects_name_only_address_mismatch() -> None:
+    xml = """<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header><body><items><item><aptNm>구의현대2단지</aptNm><umdNm>다른동</umdNm><jibun>999</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item></items></body></response>""".encode()
+    seen = ""
+
+    def transport(url: str, _timeout: float) -> bytes:
+        nonlocal seen
+        seen = url
+        return xml
+
+    service = M1Service(DataGoKrClient("encoded", transport=transport))
+    candidate = ApartmentCandidate(
+        "A1", "구의현대2단지", "1121510300", "서울 광진구 구의동 611", "road"
+    )
+    with pytest.raises(IdentityMismatchError):
+        service.retrieve(
+            candidate,
+            Apartment("apt-1", candidate.name),
+            AnalysisPeriod(date(2025, 1, 1), date(2025, 1, 31)),
+        )
+    assert "LAWD_CD=11215" in seen
 
 
 def test_cache_result_cannot_masquerade_as_live() -> None:

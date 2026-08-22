@@ -45,6 +45,7 @@ The system can retrieve and normalize apartment sale transactions for a selected
 
 - [`test_normalization_preserves_required_optional_and_source_values`](../../tests/test_m1.py) covers AC-1 through AC-3.
 - [`test_retrieval_is_idempotent_and_enforces_date_boundaries`](../../tests/test_m1.py) covers AC-4.
+- [`test_retrieval_uses_legal_code_and_rejects_name_only_address_mismatch`](../../tests/test_m1.py) covers identity-safe retrieval for AC-3 and AC-5.
 - [`test_valid_empty_xml_is_distinct_from_failure`](../../tests/test_acquisition.py) covers the valid-empty side of AC-5.
 
 ### Manual or data validation
@@ -53,7 +54,7 @@ The system can retrieve and normalize apartment sale transactions for a selected
 
 ### Verification gaps
 
-- Automated evidence uses deterministic fixtures. Live transaction retrieval and a manual three-name source intersection succeeded, but selected K-APT candidates cannot yet be linked to MOLIT queries using the required legal-dong and full-address evidence.
+- Deterministic fixtures cover normalization and source outcomes. Opt-in live validation resolves and retrieves three complexes end to end for a two-month period.
 
 ## Open questions
 

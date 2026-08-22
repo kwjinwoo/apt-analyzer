@@ -139,10 +139,8 @@ class DataGoKrClient:
             if "service" in lowered and "key" in lowered or "인증" in message:
                 raise AuthenticationError(f"source authentication failed ({code})")
             raise ProtocolError(f"source rejected request ({code or 'missing code'})")
-        records = tuple(
-            {child.tag: (child.text or "").strip() for child in item}
-            for item in root.findall(".//items/item")
-        )
+        items = root.findall(".//items/item") or root.findall("./body/item")
+        records = tuple({child.tag: (child.text or "").strip() for child in item} for item in items)
         return SourceResult(
             SourceOutcome.RECORDS if records else SourceOutcome.EMPTY,
             records,
@@ -162,9 +160,10 @@ class DataGoKrClient:
             code = str(header["resultCode"])
             if code not in {"000", "00"}:
                 raise ProtocolError(f"source rejected request ({code})")
-            raw_values: object = body.get("items", [])
+            raw_values: object = body.get("items", body.get("item", []))
             if isinstance(raw_values, dict):
-                raw_values = cast(dict[str, object], raw_values).get("item", [])
+                value_dict = cast(dict[str, object], raw_values)
+                raw_values = value_dict.get("item", [value_dict])
             if not isinstance(raw_values, list):
                 raise TypeError("items must be a list")
             values = cast(list[dict[str, object]], raw_values)

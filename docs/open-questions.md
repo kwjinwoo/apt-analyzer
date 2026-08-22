@@ -20,7 +20,7 @@ Incorrect matching can combine different complexes or fragment one complex, inva
 
 ### Status
 
-Unresolved. [ADR-0003](decisions/ADR-0003-official-sources-and-apartment-identity.md) records the proposed direction and partial evidence. K-APT list data supports ambiguous-name discovery, but the detail operation needed to link legal-dong and full-address evidence to MOLIT currently requires additional API approval.
+Resolved for the initial version by [ADR-0003](decisions/ADR-0003-official-sources-and-apartment-identity.md). K-APT candidates are enriched with legal-dong and full-address evidence before MOLIT retrieval. Renamed-complex continuity and a universal permanent cross-source identifier remain outside this resolution.
 
 ## OQ-002: Area-group boundary
 

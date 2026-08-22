@@ -47,7 +47,7 @@ A real apartment complex can be resolved and its sale transaction history can be
 - Source failures, retries, and cached responses do not silently change analysis meaning.
 - Apartment identity mismatches are detectable rather than silently accepted.
 
-Partial evidence: deterministic contract tests cover acquisition and service boundaries; live validation on 2026-08-22 reproduced a 262-candidate ambiguous `현대` search and manually cross-checked three K-APT names with MOLIT January 2025 trades. M1 remains incomplete because the available K-APT list rows lack legal-dong and full-address evidence, while the required detail operation returns HTTP 403 for the configured key. [ADR-0003](decisions/ADR-0003-official-sources-and-apartment-identity.md) remains proposed until that linkage is accessible and validated end to end.
+Completion evidence: deterministic contract tests cover acquisition, detail enrichment, mismatch detection, normalization, duplicate, failure, retry, and cache boundaries. Opt-in live validation on 2026-08-22 reproduced a 262-candidate ambiguous `현대` search and resolved three K-APT candidates through legal-dong and full-address evidence before retrieving their MOLIT transactions for 2025-01 through 2025-02. The initial policy is accepted in [ADR-0003](decisions/ADR-0003-official-sources-and-apartment-identity.md).
 
 ## M2: Single-complex analyzer
 

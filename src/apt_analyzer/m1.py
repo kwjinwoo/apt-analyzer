@@ -14,6 +14,7 @@ from apt_analyzer.acquisition import DataGoKrClient, ParsingError
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 
 KAPT_LIST_ENDPOINT = "https://apis.data.go.kr/1613000/AptListService3/getSidoAptList3"
+KAPT_DETAIL_ENDPOINT = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusBassInfoV4"
 MOLIT_SALE_ENDPOINT = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
 
 
@@ -41,6 +42,10 @@ class ResolutionStatus(StrEnum):
     AMBIGUOUS = "ambiguous"
 
 
+class IdentityMismatchError(ValueError):
+    """Indicate that same-name source rows conflict with selected address evidence."""
+
+
 @dataclass(frozen=True, slots=True)
 class IdentityResolution:
     """Return explicit identity resolution rather than selecting silently."""
@@ -57,6 +62,13 @@ def resolve_candidate(candidates: tuple[ApartmentCandidate, ...]) -> IdentityRes
     if len(candidates) != 1:
         return IdentityResolution(ResolutionStatus.AMBIGUOUS, candidates)
     candidate = candidates[0]
+    if not (
+        candidate.source_id
+        and len(candidate.legal_dong_code) == 10
+        and candidate.lot_address
+        and candidate.road_address
+    ):
+        return IdentityResolution(ResolutionStatus.NOT_FOUND, candidates)
     evidence = "|".join(
         (
             candidate.source_id,
@@ -130,6 +142,33 @@ class M1Service:
             page += 1
         return tuple(candidates)
 
+    def resolve(
+        self, selected: ApartmentCandidate
+    ) -> tuple[ApartmentCandidate, IdentityResolution]:
+        """Enrich one explicit selection with K-APT identity evidence and resolve it."""
+        result = self._client.get_xml(
+            KAPT_DETAIL_ENDPOINT,
+            {"kaptCode": selected.source_id},
+            source="K-APT apartment basic information",
+        )
+        if len(result.records) != 1:
+            return selected, IdentityResolution(ResolutionStatus.NOT_FOUND, (selected,))
+        row = result.records[0]
+        detail_name = _pick(row, "kaptName")
+        detail_id = _pick(row, "kaptCode") or selected.source_id
+        if detail_id != selected.source_id or normalize_name(detail_name) != normalize_name(
+            selected.name
+        ):
+            return selected, IdentityResolution(ResolutionStatus.NOT_FOUND, (selected,))
+        enriched = ApartmentCandidate(
+            source_id=detail_id,
+            name=detail_name,
+            legal_dong_code=_pick(row, "bjdCode"),
+            lot_address=_pick(row, "kaptAddr"),
+            road_address=_pick(row, "doroJuso"),
+        )
+        return enriched, resolve_candidate((enriched,))
+
     def retrieve(
         self,
         candidate: ApartmentCandidate,
@@ -138,6 +177,7 @@ class M1Service:
     ) -> tuple[NormalizedTransaction, ...]:
         """Retrieve all intersecting months and enforce inclusive day boundaries."""
         records: dict[str, NormalizedTransaction] = {}
+        mismatched_same_name = False
         lawd = candidate.legal_dong_code[:5]
         if len(lawd) != 5:
             raise ValueError("candidate must provide a legal-dong code")
@@ -150,9 +190,16 @@ class M1Service:
             for row in result.records:
                 if normalize_name(_pick(row, "aptNm", "아파트")) != normalize_name(candidate.name):
                     continue
+                if not _matches_lot_address(row, candidate.lot_address):
+                    mismatched_same_name = True
+                    continue
                 transaction = normalize_transaction(row, apartment.internal_id)
                 if period.includes(transaction.contract_date):
                     records[transaction.source_record_id or ""] = transaction
+        if not records and mismatched_same_name:
+            raise IdentityMismatchError(
+                "same-name transactions conflict with selected lot-address evidence"
+            )
         return tuple(
             sorted(
                 records.values(), key=lambda item: (item.contract_date, item.source_record_id or "")
@@ -200,6 +247,25 @@ def normalize_transaction(row: Mapping[str, str], apartment_id: str) -> Normaliz
 
 def _pick(row: Mapping[str, str], *names: str) -> str:
     return next((row[name].strip() for name in names if row.get(name)), "")
+
+
+def _matches_lot_address(row: Mapping[str, str], lot_address: str) -> bool:
+    """Match the transaction legal-dong name and lot number to K-APT evidence."""
+    tokens = lot_address.split()
+    address_index = next(
+        (
+            index
+            for index in range(len(tokens) - 2, -1, -1)
+            if tokens[index].endswith(("동", "가", "읍", "면", "리"))
+        ),
+        None,
+    )
+    if address_index is None or address_index + 1 >= len(tokens):
+        return False
+    dong, lot = tokens[address_index], tokens[address_index + 1]
+    return normalize_name(_pick(row, "umdNm", "법정동")) == normalize_name(dong) and normalize_name(
+        _pick(row, "jibun", "지번")
+    ) == normalize_name(lot)
 
 
 def _optional(value: str) -> str | None:
