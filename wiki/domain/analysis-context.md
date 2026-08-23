@@ -3,7 +3,7 @@ title: Analysis Context
 type: domain
 role: topic
 status: active
-updated: 2026-08-22
+updated: 2026-08-23
 aliases:
   - Metric context
   - Analysis configuration
@@ -22,7 +22,7 @@ Analysis context is the complete set of conditions needed to interpret, compare,
 
 A metric value is not self-describing. The selected apartment identity, area selection, date boundaries, metric-specific periods, price aggregation, transaction inclusion policy, and denominator scope determine what the value means.
 
-Context must travel with a result rather than depending on session state or interface defaults. Human-readable and machine-readable outputs need equivalent context. Comparison requires common context across subjects while still exposing subject-specific evidence limitations such as missing household counts.
+Context must travel with a result rather than depending on session state or interface defaults. Human-readable and machine-readable outputs need equivalent context. Comparison requires common context across subjects, including the MDD period, while still exposing subject-specific evidence limitations such as missing household counts or absent area groups. Persisted monthly coverage carries source-specific freshness evidence; see [ADR-0004](../../docs/decisions/ADR-0004-sqlite-persistence-and-freshness.md).
 
 The context establishes reproducibility but does not make incompatible evidence comparable. For example, sharing the label `84㎡` does not prove equivalent area groups, and using the same MDD formula does not remove differences in price-series sparsity.
 
@@ -57,7 +57,7 @@ The context establishes reproducibility but does not make incompatible evidence 
 
 ## Verify in the repository
 
-[`AnalysisContext`](../../src/apt_analyzer/domain.py) represents the subject, inclusive period, area selection, and transaction inclusion policy. [`AnalysisResult`](../../src/apt_analyzer/analytics.py) carries one shared population across M2 metrics, discovered area groups, annual turnover, metric context, and explicit data coverage status; [`cli.py`](../../src/apt_analyzer/cli.py) preserves equivalent JSON/text context. Representative behavior is covered by [`test_m2.py`](../../tests/test_m2.py).
+[`AnalysisContext`](../../src/apt_analyzer/domain.py) represents the subject, inclusive period, area selection, and transaction inclusion policy. [`AnalysisResult`](../../src/apt_analyzer/analytics.py) carries one shared population across M2 metrics, discovered area groups, annual turnover, metric context, and explicit data coverage status; [`cli.py`](../../src/apt_analyzer/cli.py) preserves equivalent JSON/text context. [`comparison.py`](../../src/apt_analyzer/comparison.py) applies one common context including MDD period. Representative behavior is covered by [`test_m2.py`](../../tests/test_m2.py) and [`test_m3.py`](../../tests/test_m3.py).
 
 ## Related pages
 

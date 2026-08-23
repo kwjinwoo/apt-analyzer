@@ -14,6 +14,7 @@ from apt_analyzer.analytics import (
     analyze,
     discover_area_groups,
 )
+from apt_analyzer.comparison import CommonAnalysisConfig, ComparisonResult, compare
 from apt_analyzer.domain import (
     AnalysisContext,
     AnalysisPeriod,
@@ -32,6 +33,9 @@ def main() -> None:
     command = subparsers.add_parser("analyze")
     command.add_argument("input")
     command.add_argument("--format", choices=("text", "json"), default="text")
+    compare_command = subparsers.add_parser("compare")
+    compare_command.add_argument("input")
+    compare_command.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args()
     if args.command == "analyze":
         result = analyze_input(json.loads(open(args.input, encoding="utf-8").read()))
@@ -39,6 +43,13 @@ def main() -> None:
             json.dumps(result_to_dict(result), ensure_ascii=False, indent=2)
             if args.format == "json"
             else result_to_text(result)
+        )
+    if args.command == "compare":
+        result = compare_input(json.loads(open(args.input, encoding="utf-8").read()))
+        print(
+            json.dumps(comparison_to_dict(result), ensure_ascii=False, indent=2)
+            if args.format == "json"
+            else comparison_to_text(result)
         )
 
 
@@ -90,6 +101,37 @@ def analyze_input(payload: dict[str, Any]) -> AnalysisResult:
     )
 
 
+def compare_input(payload: dict[str, Any]) -> ComparisonResult:
+    """Parse a deterministic offline comparison input."""
+    apartments = tuple(
+        Apartment(item["internal_id"], item["display_name"]) for item in payload["apartments"]
+    )
+    config_data = payload["config"]
+    policy_data = config_data["inclusion_policy"]
+    config = CommonAnalysisConfig(
+        _period(config_data["overall_period"]),
+        _period(config_data["turnover_period"]),
+        _period(config_data["baseline_period"]),
+        _period(config_data["comparison_period"]),
+        _period(config_data["mdd_period"]),
+        TransactionInclusionPolicy(
+            bool(policy_data["include_cancelled"]),
+            frozenset(TransactionType(value) for value in policy_data["transaction_types"]),
+        ),
+        config_data.get("area_grouping_policy", "integer-floor-exclusive-area"),
+        config_data.get("area_group_key"),
+        config_data.get("price_series_method", "observed monthly median"),
+    )
+    transactions: dict[str, tuple[NormalizedTransaction, ...]] = {}
+    for apartment_id, values in payload.get("transactions", {}).items():
+        transactions[apartment_id] = tuple(_transaction(item) for item in values)
+    households = {
+        apartment_id: HouseholdEvidence(value.get("count"), value["scope"], value.get("source"))
+        for apartment_id, value in payload.get("households", {}).items()
+    }
+    return compare(apartments, transactions, config, households)
+
+
 def result_to_dict(result: AnalysisResult) -> dict[str, Any]:
     """Serialize an analysis without converting Decimal monetary values to float."""
     return {
@@ -114,6 +156,21 @@ def result_to_text(result: AnalysisResult) -> str:
     return "Analysis result\n" + json.dumps(result_to_dict(result), ensure_ascii=False, indent=2)
 
 
+def comparison_to_dict(result: ComparisonResult) -> dict[str, Any]:
+    """Serialize comparison context and equivalent subject evidence."""
+    return {
+        "config": _json_value(result.config),
+        "subjects": [_json_value(subject) for subject in result.subjects],
+    }
+
+
+def comparison_to_text(result: ComparisonResult) -> str:
+    """Serialize a readable deterministic comparison export."""
+    return "Comparison result\n" + json.dumps(
+        comparison_to_dict(result), ensure_ascii=False, indent=2
+    )
+
+
 def _transaction(data: dict[str, Any]) -> NormalizedTransaction:
     return NormalizedTransaction(
         data["apartment_id"],
@@ -122,6 +179,14 @@ def _transaction(data: dict[str, Any]) -> NormalizedTransaction:
         Decimal(str(data["exclusive_area_sqm"])),
         TransactionType(data["transaction_type"]),
         bool(data["is_cancelled"]),
+        data.get("floor"),
+        data.get("building"),
+        data.get("unit"),
+        data.get("construction_year"),
+        data.get("broker_location"),
+        data.get("source_name"),
+        data.get("source_record_id"),
+        tuple(tuple(item) for item in data.get("source_values", [])),
     )
 
 

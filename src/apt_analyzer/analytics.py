@@ -429,6 +429,7 @@ def analyze(
     household: HouseholdEvidence | None = None,
     baseline_period: AnalysisPeriod | None = None,
     comparison_period: AnalysisPeriod | None = None,
+    mdd_period: AnalysisPeriod | None = None,
     data_status: str = DataCoverageStatus.COMPLETE,
 ) -> AnalysisResult:
     """Compute all M2 metrics from one shared population with established coverage."""
@@ -460,7 +461,7 @@ def analyze(
         monthly_median_prices(population),
         turnover_result,
         retention_result,
-        maximum_drawdown(population),
+        maximum_drawdown(population, mdd_period),
         annual_results,
         available_groups,
         grouping.name,

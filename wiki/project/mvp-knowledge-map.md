@@ -3,7 +3,7 @@ title: MVP Knowledge Map
 type: project
 role: topic
 status: active
-updated: 2026-08-22
+updated: 2026-08-23
 aliases:
   - MVP dependency map
 tags:
@@ -36,6 +36,8 @@ Visible analysis context
         ├── Transaction retention rate
         └── Maximum drawdown and its interval
                 ↓
+SQLite coverage and freshness
+        ↓
 Comparable apartment results
 ```
 
@@ -58,6 +60,7 @@ The dependency order explains why product UI is deferred until data and metric s
 ## Decisions and open questions
 
 - [ADR-0001: Documentation as context and navigation](../../docs/decisions/ADR-0001-documentation-policy.md)
+- [ADR-0004: SQLite persistence, migrations, and monthly freshness](../../docs/decisions/ADR-0004-sqlite-persistence-and-freshness.md)
 - See the [Open decision map](open-decision-map.md) for unresolved domain and metric policies.
 
 ## Evidence and interpretation risks
@@ -69,7 +72,7 @@ The dependency order explains why product UI is deferred until data and metric s
 
 ## Verify in the repository
 
-Initial foundation evidence exists in the source-independent values in [`domain.py`](../../src/apt_analyzer/domain.py) and the pure transaction-volume boundary in [`analytics.py`](../../src/apt_analyzer/analytics.py). Representative tests are in [`test_domain.py`](../../tests/test_domain.py) and [`test_transaction_volume.py`](../../tests/test_transaction_volume.py). Acquisition, identity resolution, normalization adapters, the remaining metrics, and an end-to-end acceptance path remain unimplemented.
+M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py).
 
 ## Related pages
 

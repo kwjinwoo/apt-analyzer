@@ -53,6 +53,24 @@ Minimal input shape:
 For a group selection, first inspect the JSON result's `available_area_groups`
 and pass its key as `{"kind": "group", "key": "floor-84"}`.
 
+## Offline M3 comparison
+
+Compare offline subjects with one shared configuration:
+
+```bash
+apt-analyzer compare comparison.json --format text
+apt-analyzer compare comparison.json --format json
+```
+
+The input declares apartments, transactions keyed by apartment ID, and common periods, area-group key, price method, and inclusion policy. Missing subject evidence is exported as unavailable.
+
+For local persistence, use the stdlib `SQLiteStore` API with an injected
+`fetch_month` callable. `update_incremental` records source-specific monthly
+coverage and fetched-at freshness, skips fresh months, counts inserts and
+duplicates, and keeps failed or mismatched months out of successful coverage.
+`load_transactions` supplies reproducible evidence to `compare` without a
+network call.
+
 ## Current Focus
 
 The initial goal is to answer a simple question:

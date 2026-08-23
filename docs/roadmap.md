@@ -85,6 +85,8 @@ Previously acquired data can be updated locally, and multiple apartment complexe
 
 This milestone completes the initial multi-complex MVP described by the accepted requirements.
 
+Completion evidence: `tests/test_m3.py` covers atomic deterministic v1→v2 migration with exact-duplicate collapse, source-specific valid-empty monthly caching/freshness and provenance or apartment/month mismatch failures, persisted evidence loaded into a two-subject common-context comparison, subject-integrity validation, explicit absent-group unavailability, co-present metrics, and the real `compare INPUT --format text|json` CLI with equivalent exports. Persistence direction is recorded in ADR-0004.
+
 ## M4: Screening and visualization
 
 ### Outcome
