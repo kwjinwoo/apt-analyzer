@@ -18,6 +18,41 @@ DATA_GO_KR_SERVICE_KEY=your_percent_encoded_key
 
 The environment variable takes precedence. The key is already percent-encoded and the client preserves it exactly once. Never commit `.env` or print credential-bearing request URLs.
 
+## Offline M2 analyzer
+
+The first MVP analyzes a deterministic JSON fixture without a network call:
+
+```bash
+apt-analyzer analyze input.json --format text
+apt-analyzer analyze input.json --format json
+```
+
+The input declares `data_status` as `complete` (or `valid_empty` for a known
+successful empty result), the selected apartment, an inclusive overall period,
+normalized transactions, and an explicit inclusion policy. Area groups are
+discovered from the selected apartment's known transactions for that period;
+use `{"kind": "all"}` or select a discovered group by its `key`. Turnover and
+retention accept complete calendar-year periods only and expose household
+count, scope, and source evidence. MDD uses observed monthly medians; missing
+months are not interpolated. JSON preserves monetary precision as strings, and
+text output contains the same context and metric fields.
+
+Minimal input shape:
+
+```json
+{
+  "data_status": "complete",
+  "apartment": {"internal_id": "apt-1", "display_name": "Example"},
+  "period": {"start": "2024-01-01", "end": "2025-12-31"},
+  "area_selection": {"kind": "all"},
+  "inclusion_policy": {"include_cancelled": false, "transaction_types": ["brokered"]},
+  "transactions": []
+}
+```
+
+For a group selection, first inspect the JSON result's `available_area_groups`
+and pass its key as `{"kind": "group", "key": "floor-84"}`.
+
 ## Current Focus
 
 The initial goal is to answer a simple question:

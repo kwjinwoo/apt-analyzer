@@ -42,7 +42,8 @@ The system aggregates eligible transactions by calendar year and reports transac
 
 ### Automated
 
-Not established yet.
+- [`test_yearly_and_monthly_results_keep_empty_years_and_observation_counts`](../../tests/test_m2.py) covers exact yearly statistics, represented empty years, and monthly evidence counts.
+- [`test_cli_rejects_unknown_data_coverage_and_preserves_valid_empty_status`](../../tests/test_m2.py) covers the distinction between successful empty coverage and unknown coverage.
 
 ### Manual or data validation
 
@@ -50,7 +51,7 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- Public-source validation against real complexes remains open.
 
 ## Open questions
 

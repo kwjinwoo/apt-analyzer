@@ -53,7 +53,7 @@ Both periods must use the same identity, area group, transaction inclusion rules
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When implemented, verify shared population context, consistent annualization, zero-baseline behavior, exposed component counts, and representative comparison tests.
+[`retention`](../../src/apt_analyzer/analytics.py) uses the shared eligible population, consistent complete-year annualization, and an explicit zero-baseline unavailable state. Representative evidence is in [`test_m2.py`](../../tests/test_m2.py).
 
 ## Related pages
 

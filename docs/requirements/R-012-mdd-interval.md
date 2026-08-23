@@ -41,7 +41,7 @@ The maximum-drawdown result identifies the peak and subsequent trough observatio
 
 ### Automated
 
-Not established yet.
+- [`test_mdd_reports_peak_trough_and_sparse_unavailable_state`](../../tests/test_m2.py) covers peak/trough observation ordering and values.
 
 ### Manual or data validation
 

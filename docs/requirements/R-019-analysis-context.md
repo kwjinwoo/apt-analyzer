@@ -53,8 +53,7 @@ The user can inspect the analysis conditions used to produce every result.
 
 ### Verification gaps
 
-- AC-3, AC-4, and AC-6 remain unverified until their metric-specific results exist.
-- Human-readable and exported result forms are not established yet.
+- Household denominator evidence and metric-specific periods are carried by the M2 result; [`test_integrated_result_exposes_areas_and_text_json_are_context_equivalent`](../../tests/test_m2.py) covers equivalent deterministic text/JSON context.
 
 ## Open questions
 

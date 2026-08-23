@@ -58,7 +58,7 @@ Area composition, floor, building, transaction type, cancellations, and unusual 
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When price series exist, verify monthly grouping, median behavior for even and odd counts, missing-month representation, observation counts, active filters, and sparse real-complex examples.
+[`monthly_median_prices`](../../src/apt_analyzer/analytics.py) exposes observed months and transaction counts without interpolation, and MDD carries those method labels in its context; [`test_m2.py`](../../tests/test_m2.py) verifies gap-preserving observations. Sparse real-complex validation remains open.
 
 ## Related pages
 

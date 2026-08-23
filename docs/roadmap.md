@@ -65,6 +65,8 @@ A user can analyze one selected complex and area population through a reproducib
 - Representative acceptance tests link back to the relevant requirements.
 - Human-readable and machine-readable result forms are available through the initial interface.
 
+Completion evidence: `tests/test_m2.py` covers deterministic area grouping and selection, exact yearly summaries and valid-empty coverage, successful annual/multi-year turnover and retention with explicit methods, shared-policy propagation, explicit unavailable states, monthly evidence, MDD peak/trough/subperiod and non-declining behavior, integrated context, and deterministic text/JSON serialization. `test_real_console_entrypoint_outputs_configured_json_and_text` exercises the actual `apt-analyzer analyze INPUT --format text|json` entry point with `tests/fixtures/m2_input.json`; repository validation and pre-commit checks pass.
+
 This is the first usable MVP for a single apartment complex.
 
 ## M3: Persistence and apartment comparison

@@ -56,7 +56,7 @@ The grouping policy must remain replaceable and independently testable. Integer-
 
 ## Verify in the repository
 
-[`AreaGroup` and `AreaSelection`](../../src/apt_analyzer/domain.py) represent explicit groups and all-or-group selections without choosing a grouping algorithm. [`test_domain.py`](../../tests/test_domain.py) verifies raw-area preservation and selection behavior. Classification-policy and real-complex distribution evidence do not exist yet.
+[`AreaGroup` and `AreaSelection`](../../src/apt_analyzer/domain.py) represent explicit groups and all-or-group selections. [`ExclusiveAreaGroupingPolicy`](../../src/apt_analyzer/analytics.py) provides the replaceable experimental integer-floor policy, verified by [`test_m2.py`](../../tests/test_m2.py). Real-complex distribution evidence does not exist yet.
 
 ## Related pages
 

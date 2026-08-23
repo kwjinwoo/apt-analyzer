@@ -1,0 +1,154 @@
+"""Deterministic JSON/text command-line interface for the M2 analyzer."""
+
+import argparse
+import json
+from dataclasses import asdict
+from datetime import date
+from decimal import Decimal
+from typing import Any, cast
+
+from apt_analyzer.analytics import (
+    AnalysisResult,
+    DataCoverageStatus,
+    HouseholdEvidence,
+    analyze,
+    discover_area_groups,
+)
+from apt_analyzer.domain import (
+    AnalysisContext,
+    AnalysisPeriod,
+    Apartment,
+    AreaSelection,
+    NormalizedTransaction,
+    TransactionInclusionPolicy,
+    TransactionType,
+)
+
+
+def main() -> None:
+    """Run ``apt-analyzer analyze INPUT --format text|json``."""
+    parser = argparse.ArgumentParser(prog="apt-analyzer")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    command = subparsers.add_parser("analyze")
+    command.add_argument("input")
+    command.add_argument("--format", choices=("text", "json"), default="text")
+    args = parser.parse_args()
+    if args.command == "analyze":
+        result = analyze_input(json.loads(open(args.input, encoding="utf-8").read()))
+        print(
+            json.dumps(result_to_dict(result), ensure_ascii=False, indent=2)
+            if args.format == "json"
+            else result_to_text(result)
+        )
+
+
+def analyze_input(payload: dict[str, Any]) -> AnalysisResult:
+    """Parse the explicit offline input contract and calculate its result."""
+    apartment_data = payload["apartment"]
+    data_status = payload.get("data_status")
+    if data_status not in (DataCoverageStatus.COMPLETE, DataCoverageStatus.VALID_EMPTY):
+        raise ValueError("data_status must be 'complete' or 'valid_empty'")
+    apartment = Apartment(apartment_data["internal_id"], apartment_data["display_name"])
+    period = _period(payload["period"])
+    inclusion_data = payload["inclusion_policy"]
+    policy = TransactionInclusionPolicy(
+        bool(inclusion_data["include_cancelled"]),
+        frozenset(TransactionType(value) for value in inclusion_data["transaction_types"]),
+    )
+    transactions = tuple(_transaction(item) for item in payload["transactions"])
+    area_data = payload.get("area_selection", {"kind": "all"})
+    if area_data.get("kind") == "all":
+        selection = AreaSelection.all()
+    else:
+        available = discover_area_groups(
+            transaction
+            for transaction in transactions
+            if transaction.apartment_id == apartment.internal_id
+            and period.includes(transaction.contract_date)
+        )
+        matches = tuple(group for group in available if group.key == area_data["key"])
+        if not matches:
+            raise ValueError("area group key is not present in selected-apartment evidence")
+        selection = AreaSelection.for_group(matches[0])
+    context = AnalysisContext(apartment, period, selection, policy)
+    household_data = payload.get("household")
+    household = (
+        None
+        if household_data is None
+        else HouseholdEvidence(
+            household_data.get("count"), household_data["scope"], household_data.get("source")
+        )
+    )
+    return analyze(
+        transactions,
+        context,
+        turnover_period=_optional_period(payload.get("turnover_period")),
+        household=household,
+        baseline_period=_optional_period(payload.get("baseline_period")),
+        comparison_period=_optional_period(payload.get("comparison_period")),
+        data_status=data_status,
+    )
+
+
+def result_to_dict(result: AnalysisResult) -> dict[str, Any]:
+    """Serialize an analysis without converting Decimal monetary values to float."""
+    return {
+        "context": _json_value(result.population.context),
+        "raw_count": len(result.population.raw),
+        "eligible_count": len(result.population.eligible),
+        "yearly_summaries": _json_value(result.yearly_summaries),
+        "monthly_prices": _json_value(result.monthly_prices),
+        "turnover": _json_value(result.turnover),
+        "retention": _json_value(result.retention),
+        "mdd": _json_value(result.mdd),
+        "annual_turnover": _json_value(result.annual_turnover),
+        "available_area_groups": _json_value(result.available_area_groups),
+        "area_grouping_policy": result.area_grouping_policy,
+        "area_discovery_period": _json_value(result.area_discovery_period),
+        "data_status": result.data_status,
+    }
+
+
+def result_to_text(result: AnalysisResult) -> str:
+    """Serialize every material result field in deterministic readable JSON text."""
+    return "Analysis result\n" + json.dumps(result_to_dict(result), ensure_ascii=False, indent=2)
+
+
+def _transaction(data: dict[str, Any]) -> NormalizedTransaction:
+    return NormalizedTransaction(
+        data["apartment_id"],
+        date.fromisoformat(data["contract_date"]),
+        int(data["price_krw"]),
+        Decimal(str(data["exclusive_area_sqm"])),
+        TransactionType(data["transaction_type"]),
+        bool(data["is_cancelled"]),
+    )
+
+
+def _period(data: dict[str, str]) -> AnalysisPeriod:
+    return AnalysisPeriod(date.fromisoformat(data["start"]), date.fromisoformat(data["end"]))
+
+
+def _optional_period(data: dict[str, str] | None) -> AnalysisPeriod | None:
+    return None if data is None else _period(data)
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, (tuple, list)):
+        sequence = cast(tuple[Any, ...] | list[Any], value)
+        return [_json_value(item) for item in sequence]
+    if isinstance(value, (frozenset, set)):
+        sequence = cast(frozenset[Any] | set[Any], value)
+        return sorted(_json_value(item) for item in sequence)
+    if hasattr(value, "__dataclass_fields__"):
+        return {key: _json_value(item) for key, item in asdict(value).items()}
+    if isinstance(value, dict):
+        mapping = cast(dict[Any, Any], value)
+        return {str(key): _json_value(item) for key, item in mapping.items()}
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)

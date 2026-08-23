@@ -42,7 +42,8 @@ The system can assign similar raw exclusive-area values to a replaceable area-gr
 
 ### Automated
 
-Not established yet.
+- [`test_discover_area_groups_preserves_raw_areas_with_integer_floor`](../../tests/test_m2.py) covers deterministic replaceable integer-floor grouping and raw-area preservation.
+- [`test_grouping_policy_is_replaceable`](../../tests/test_m2.py) covers injection of an alternative grouping policy.
 
 ### Manual or data validation
 
@@ -50,7 +51,7 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- The experimental policy is not accepted as a universal market convention.
 
 ## Open questions
 

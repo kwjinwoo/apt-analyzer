@@ -59,7 +59,7 @@ The MDD value is interpretable only with the peak and trough months and prices, 
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When implemented, verify monthly aggregation, temporal peak-before-trough ordering, missing-evidence behavior, returned peak and trough context, and representative sparse-series tests.
+[`maximum_drawdown`](../../src/apt_analyzer/analytics.py) uses observed monthly medians without interpolation, carries its effective period and method labels, and returns peak/trough observations or an explicit sparse-evidence unavailable state. Representative evidence is in [`test_m2.py`](../../tests/test_m2.py).
 
 ## Related pages
 

@@ -42,7 +42,7 @@ The user can select a baseline period and comparison period and obtain the compa
 
 ### Automated
 
-Not established yet.
+- [`test_retention_annualizes_differing_complete_period_lengths`](../../tests/test_m2.py) covers successful annualized comparison arithmetic; [`test_turnover_and_retention_make_unsupported_and_zero_baseline_explicit`](../../tests/test_m2.py) covers complete-period and zero-baseline unavailable states.
 
 ### Manual or data validation
 

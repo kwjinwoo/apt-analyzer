@@ -55,7 +55,7 @@ The system identifies cancelled, direct, and brokered transactions and applies a
 
 ### Verification gaps
 
-- Non-volume metric propagation is not established yet.
+- [`test_non_volume_metrics_use_same_area_type_and_cancellation_population`](../../tests/test_m2.py) covers shared area, cancellation, and transaction-type filtering beyond volume; broader source validation remains open.
 
 ## Open questions
 

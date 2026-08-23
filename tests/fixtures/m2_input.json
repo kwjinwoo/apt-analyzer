@@ -1,0 +1,17 @@
+{
+  "data_status": "complete",
+  "apartment": {"internal_id": "apt-1", "display_name": "Example"},
+  "period": {"start": "2024-01-01", "end": "2025-12-31"},
+  "area_selection": {"kind": "all"},
+  "inclusion_policy": {"include_cancelled": false, "transaction_types": ["brokered"]},
+  "household": {"count": 100, "scope": "complex", "source": "fixture"},
+  "turnover_period": {"start": "2024-01-01", "end": "2025-12-31"},
+  "baseline_period": {"start": "2024-01-01", "end": "2024-12-31"},
+  "comparison_period": {"start": "2025-01-01", "end": "2025-12-31"},
+  "transactions": [
+    {"apartment_id": "apt-1", "contract_date": "2024-01-01", "price_krw": 110000000, "exclusive_area_sqm": "84.81", "transaction_type": "brokered", "is_cancelled": false},
+    {"apartment_id": "apt-1", "contract_date": "2024-03-01", "price_krw": 105000000, "exclusive_area_sqm": "84.97", "transaction_type": "brokered", "is_cancelled": false},
+    {"apartment_id": "apt-1", "contract_date": "2025-01-01", "price_krw": 100000000, "exclusive_area_sqm": "84.81", "transaction_type": "brokered", "is_cancelled": false},
+    {"apartment_id": "apt-1", "contract_date": "2025-03-01", "price_krw": 80000000, "exclusive_area_sqm": "84.97", "transaction_type": "brokered", "is_cancelled": false}
+  ]
+}

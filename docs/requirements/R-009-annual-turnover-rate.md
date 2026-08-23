@@ -41,7 +41,7 @@ The system reports turnover for individual calendar years using the same denomin
 
 ### Automated
 
-Not established yet.
+- [`test_successful_annual_and_multiyear_turnover_expose_context_and_evidence`](../../tests/test_m2.py) covers successful per-calendar-year turnover arithmetic, denominator scope, and context.
 
 ### Manual or data validation
 
@@ -49,7 +49,7 @@ None.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- Validation against real household evidence remains open.
 
 ## Open questions
 

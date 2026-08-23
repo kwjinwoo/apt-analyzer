@@ -43,7 +43,7 @@ The system calculates maximum drawdown over a selected price series, using month
 
 ### Automated
 
-Not established yet.
+- [`test_mdd_reports_peak_trough_and_sparse_unavailable_state`](../../tests/test_m2.py) and [`test_mdd_subperiod_is_effective_context_and_serializable`](../../tests/test_m2.py) cover observed monthly medians, sparse evidence, effective period, method labels, and explicit MDD context.
 
 ### Manual or data validation
 

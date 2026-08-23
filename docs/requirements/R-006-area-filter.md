@@ -44,6 +44,8 @@ The user can select all areas or one discovered area group, and the selection is
 
 - [`test_all_area_selection_includes_any_raw_area`](../../tests/test_domain.py) covers the domain contract for AC-1.
 - [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers AC-2 and AC-4 for transaction volume.
+- [`test_non_volume_metrics_use_same_area_type_and_cancellation_population`](../../tests/test_m2.py) covers AC-2 and AC-3 across summaries and MDD.
+- [`test_area_group_turnover_rejects_whole_complex_denominator_scope`](../../tests/test_m2.py) covers AC-5.
 
 ### Manual or data validation
 
@@ -51,8 +53,7 @@ None.
 
 ### Verification gaps
 
-- AC-3 remains unverified across price summaries, retention, and MDD.
-- AC-5 remains unverified until turnover output exists.
+- Area-specific household evidence from real complexes remains open.
 
 ## Open questions
 

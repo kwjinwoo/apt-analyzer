@@ -57,7 +57,7 @@ The context establishes reproducibility but does not make incompatible evidence 
 
 ## Verify in the repository
 
-[`AnalysisContext`](../../src/apt_analyzer/domain.py) represents the subject, inclusive period, area selection, and transaction inclusion policy. [`TransactionVolumeResult`](../../src/apt_analyzer/analytics.py) retains that context, as verified by [`test_transaction_volume.py`](../../tests/test_transaction_volume.py). Interface, export, and metric-specific context evidence remain absent.
+[`AnalysisContext`](../../src/apt_analyzer/domain.py) represents the subject, inclusive period, area selection, and transaction inclusion policy. [`AnalysisResult`](../../src/apt_analyzer/analytics.py) carries one shared population across M2 metrics, discovered area groups, annual turnover, metric context, and explicit data coverage status; [`cli.py`](../../src/apt_analyzer/cli.py) preserves equivalent JSON/text context. Representative behavior is covered by [`test_m2.py`](../../tests/test_m2.py).
 
 ## Related pages
 

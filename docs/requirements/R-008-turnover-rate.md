@@ -43,7 +43,7 @@ The user can obtain a turnover rate for a selected period, defined as annualized
 
 ### Automated
 
-Not established yet.
+- [`test_successful_annual_and_multiyear_turnover_expose_context_and_evidence`](../../tests/test_m2.py) covers successful annualized arithmetic, the explicit annualization method, and denominator context; [`test_metric_period_outside_context_is_unavailable_and_household_source_required`](../../tests/test_m2.py) covers invalid-period, source, and denominator failures.
 
 ### Manual or data validation
 

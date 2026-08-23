@@ -41,7 +41,8 @@ The system identifies and presents the exclusive-area selections available for a
 
 ### Automated
 
-Not established yet.
+- [`test_discover_area_groups_preserves_raw_areas_with_integer_floor`](../../tests/test_m2.py) covers AC-1 through AC-4 for deterministic discovery and raw-area visibility.
+- [`test_discover_area_groups_represents_absent_area_evidence_as_empty`](../../tests/test_m2.py) covers explicit absence of area evidence.
 
 ### Manual or data validation
 
@@ -49,7 +50,7 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- Real-complex distribution validation remains open.
 
 ## Open questions
 

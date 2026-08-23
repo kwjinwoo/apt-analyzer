@@ -55,7 +55,7 @@ Annualization makes periods comparable only when boundary and duration semantics
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When implemented, verify the domain calculation, duration semantics, missing-denominator result, context propagation, and representative annual and multi-year acceptance tests.
+[`turnover`](../../src/apt_analyzer/analytics.py) calculates complete calendar-year-aligned periods using the explicit `complete-calendar-year-average` annualization method and returns unavailable states for partial/outside periods, invalid household denominators, missing source evidence, or scope mismatch. `AnalysisResult.annual_turnover` exposes each complete represented year. Representative evidence is in [`test_m2.py`](../../tests/test_m2.py); area-specific denominator policy remains unresolved.
 
 ## Related pages
 
