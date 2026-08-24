@@ -2,14 +2,14 @@
 id: R-013
 title: Transaction-volume visualization
 status: accepted
-priority: P1
+priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-24
 origin: "Initial requirements R11"
 supersedes: []
 superseded_by: null
 related_requirements: [R-007, R-019]
-related_decisions: []
+related_decisions: [ADR-0005]
 ---
 
 # R-013: Transaction-volume visualization
@@ -35,7 +35,7 @@ The user can view eligible transaction volume as a yearly or monthly time series
 
 ## Non-goals
 
-- Selecting a final charting framework during core analytics validation.
+- Regional-scale screening and ranking.
 
 ## Verification
 
@@ -49,7 +49,8 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- AC-1 through AC-4 have no implementation evidence yet; the current web route is
+  only a scaffold.
 
 ## Open questions
 
@@ -59,3 +60,4 @@ None.
 
 - [Transaction volume](../domain/metrics.md#transaction-volume)
 - [Periodic aggregation requirement](R-007-periodic-aggregation.md)
+- [ADR-0005: Local-web delivery stack](../decisions/ADR-0005-local-web-delivery-stack.md)

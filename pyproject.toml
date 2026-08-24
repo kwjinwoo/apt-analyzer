@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Analyze apartment transaction liquidity and price resilience."
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
-dependencies = []
+dependencies = [
+    "fastapi>=0.141.1",
+    "jinja2>=3.1.6",
+    "python-multipart>=0.0.32",
+    "uvicorn>=0.52.4",
+]
 
 [project.scripts]
 apt-analyzer = "apt_analyzer.cli:main"
@@ -16,10 +21,13 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "commitizen>=4.18.0",
+    "djlint>=1.44.2",
+    "httpx2>=2.12.0",
     "pre-commit>=4.6.2",
     "pre-commit-hooks>=6.0.0",
     "pyright>=1.1.411",
     "pytest>=9.1.1",
+    "pytest-playwright>=0.9.0",
     "ruff>=0.16.4",
 ]
 
@@ -51,6 +59,10 @@ typeCheckingMode = "strict"
 minversion = "8.0"
 addopts = ["--strict-config", "--strict-markers", "-ra"]
 testpaths = ["tests"]
+markers = [
+    "e2e: browser-backed deterministic tests (opt-in)",
+    "live: tests that call external data sources (opt-in)",
+]
 
 [tool.commitizen]
 name = "cz_conventional_commits"

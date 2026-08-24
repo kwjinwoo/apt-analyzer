@@ -3,7 +3,7 @@ title: Requirement Map
 type: project
 role: topic
 status: active
-updated: 2026-08-22
+updated: 2026-08-24
 aliases:
   - Requirement knowledge graph
 tags:
@@ -15,7 +15,7 @@ tags:
 
 ## Scope
 
-This hub groups the nineteen initial requirements by knowledge dependency instead of repeating their normative text.
+This hub groups the twenty accepted requirements by knowledge dependency instead of repeating their normative text.
 
 ## Knowledge
 
@@ -36,9 +36,12 @@ Analytics
   R-011 → R-012
 
 Interpretation and presentation
-  R-013
-  R-014
+  R-013 (P0)
+  R-014 (P0)
   R-019
+
+Local interface
+  R-020 → R-001/R-002/R-013/R-014/R-016/R-017/R-019
 
 Multi-complex use
   R-016 → R-015
@@ -53,6 +56,8 @@ The arrows express knowledge dependency, not implementation order or control flo
 - Analytics requirements connect through [Turnover rate](../metrics/turnover-rate.md), [Transaction retention rate](../metrics/transaction-retention-rate.md), and [Maximum drawdown](../metrics/maximum-drawdown.md).
 - Interpretation depends on [Analysis context](../domain/analysis-context.md) and [Price-series evidence](../data/price-series-evidence.md).
 - End-to-end dependency is summarized by the [MVP knowledge map](mvp-knowledge-map.md).
+- The local interface boundary is defined by [R-020](../../docs/requirements/R-020-local-browser-analysis-workspace.md)
+  and [ADR-0005](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
 
 ## Requirements
 
@@ -62,7 +67,7 @@ The arrows express knowledge dependency, not implementation order or control flo
 ## Decisions and open questions
 
 - Requirement relationships affected by unresolved policy are collected in the [Open decision map](open-decision-map.md).
-- Requirement semantics are governed by [ADR-0001](../../docs/decisions/ADR-0001-documentation-policy.md), which keeps current behavior authoritative in code and tests.
+- Requirement semantics are governed by [ADR-0001](../../docs/decisions/ADR-0001-documentation-policy.md), which keeps current behavior authoritative in code and tests. Interface choices are recorded in [ADR-0005](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
 
 ## Evidence and interpretation risks
 
@@ -72,7 +77,7 @@ The arrows express knowledge dependency, not implementation order or control flo
 
 ## Verify in the repository
 
-Initial domain and transaction-volume evidence is linked from R-003, R-006, R-017, and R-019. Representative evidence remains linked from each Requirement document rather than duplicated in this map.
+Initial domain and transaction-volume evidence is linked from R-003, R-006, R-017, and R-019. R-013, R-014, and R-020 remain implementation gaps beyond the web scaffold. Representative evidence remains linked from each Requirement document rather than duplicated in this map.
 
 ## Related pages
 

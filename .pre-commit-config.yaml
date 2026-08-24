@@ -69,9 +69,37 @@ repos:
 
       - id: pytest
         name: Run pytest
-        entry: uv run --locked pytest
+        entry: uv run --locked pytest -m "not e2e and not live"
         language: system
         files: ^(src/|tests/|pyproject\.toml$|uv\.lock$)
+        pass_filenames: false
+
+      - id: djlint
+        name: Check Jinja templates
+        entry: uv run --locked djlint src/apt_analyzer/web/templates --profile=jinja --check
+        language: system
+        files: ^src/apt_analyzer/web/templates/.*\.html$
+        pass_filenames: false
+
+      - id: frontend-check
+        name: Check frontend formatting and lint
+        entry: npm run check
+        language: system
+        files: ^(frontend/|biome\.json$|package(-lock)?\.json$)
+        pass_filenames: false
+
+      - id: frontend-typecheck
+        name: Type-check frontend
+        entry: npm run typecheck
+        language: system
+        files: ^(frontend/|package(-lock)?\.json$)
+        pass_filenames: false
+
+      - id: frontend-unit
+        name: Test frontend units
+        entry: npm run test
+        language: system
+        files: ^(frontend/|package(-lock)?\.json$)
         pass_filenames: false
 
       - id: docs-lint

@@ -2,14 +2,14 @@
 id: R-014
 title: Price visualization
 status: accepted
-priority: P1
+priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-24
 origin: "Initial requirements R12"
 supersedes: []
 superseded_by: null
 related_requirements: [R-011, R-012, R-019]
-related_decisions: []
+related_decisions: [ADR-0005]
 ---
 
 # R-014: Price visualization
@@ -49,7 +49,8 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet.
+- AC-1 through AC-4 have no implementation evidence yet; the current web route is
+  only a scaffold.
 
 ## Open questions
 
@@ -60,3 +61,4 @@ Not established yet.
 
 - [Monthly median price](../domain/metrics.md#monthly-median-price)
 - [MDD interval requirement](R-012-mdd-interval.md)
+- [ADR-0005: Local-web delivery stack](../decisions/ADR-0005-local-web-delivery-stack.md)

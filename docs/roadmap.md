@@ -13,7 +13,9 @@ Single-complex analytics
     ↓
 Persistence and comparison
     ↓
-Screening and visualization
+Local web analysis and visualization
+    ↓
+Regional ingestion and screening
     ↓
 Broader analysis and productization
 ```
@@ -87,21 +89,40 @@ This milestone completes the initial multi-complex MVP described by the accepted
 
 Completion evidence: `tests/test_m3.py` covers atomic deterministic v1→v2 migration with exact-duplicate collapse, source-specific valid-empty monthly caching/freshness and provenance or apartment/month mismatch failures, persisted evidence loaded into a two-subject common-context comparison, subject-integrity validation, explicit absent-group unavailability, co-present metrics, and the real `compare INPUT --format text|json` CLI with equivalent exports. Persistence direction is recorded in ADR-0004.
 
-## M4: Screening and visualization
+## M4: Local web analyzer and visualization
 
 ### Outcome
 
-Users can inspect metric behavior over time and discover candidate complexes from precomputed, comparable results.
+Users can run a loopback-bound browser workspace to select a complex, refresh local
+evidence, and inspect comparable liquidity and price-resilience results visually.
 
 ### Done when
 
-- Transaction-volume and monthly-median price series can be inspected visually.
-- MDD peak and trough and retention periods are visually identifiable.
+- The local web workspace launches on `127.0.0.1` and preserves server-side credentials.
+- Search, explicit candidate selection, incremental update, analysis, and comparison
+  are available as one user-visible flow.
+- Transaction-volume and monthly-median price series can be inspected visually;
+  missing, empty, and failed evidence remain distinguishable.
+- MDD peak/trough and analysis context are visible with the underlying values.
+- The CLI remains available for deterministic export and regression automation.
+
+Regional-scale ingestion and screening are intentionally deferred until the local
+single-complex and comparison workflow has a browser acceptance baseline.
+
+## M5: Regional ingestion and screening
+
+### Outcome
+
+Validated, comparable data can be ingested at regional scale and filtered by explicit
+metric conditions without implying an investment recommendation.
+
+### Done when
+
 - Regional-scale ingestion and metric computation are reproducible.
 - Screening filters have explicit semantics and use comparable analysis contexts.
-- Results can be sorted or filtered without implying an investment recommendation.
+- Missing or unavailable metrics cannot pass a filter silently.
 
-## M5: Broader apartment analysis
+## M6: Broader apartment analysis
 
 ### Outcome
 
@@ -115,7 +136,7 @@ Candidate domains include long-term price behavior, complex characteristics, nea
 - Important distributions, correlations, and data-quality limitations are understood.
 - New domains can remain independently testable and interpretable.
 
-## M6: Productization
+## M7: Productization
 
 ### Outcome
 

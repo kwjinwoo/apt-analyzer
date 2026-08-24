@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   quality:
-    name: Python quality
+    name: Quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -27,6 +27,15 @@ jobs:
       - name: Sync locked development environment
         run: uv sync --locked --all-groups
 
+      - name: Install pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
       - name: Verify lockfile
         run: uv lock --check
 
@@ -40,7 +49,19 @@ jobs:
         run: uv run --locked pyright
 
       - name: Run tests
-        run: uv run --locked pytest
+        run: uv run --locked pytest -m "not e2e and not live"
+
+      - name: Check frontend formatting and lint
+        run: npm run check
+
+      - name: Type-check frontend
+        run: npm run typecheck
+
+      - name: Run frontend unit tests
+        run: npm run test
+
+      - name: Build frontend assets
+        run: npm run build
 
       - name: Run repository hooks
         run: uv run --locked pre-commit run --all-files

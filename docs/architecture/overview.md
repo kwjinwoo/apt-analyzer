@@ -19,7 +19,7 @@ Explicit analysis context and filtering
         ↓
 Domain analytics
         ↓
-CLI, comparison, screening, and later UI
+CLI, comparison, screening, and local web UI
 ```
 
 ## Boundaries
@@ -46,7 +46,10 @@ Metric calculations operate on normalized domain inputs and explicit context. Th
 
 ### Interfaces
 
-CLI, comparison, screening, visualization, and future web interfaces consume domain capabilities. Presentation choices must not redefine metric semantics.
+CLI, comparison, screening, visualization, and the local web interface consume
+domain capabilities. The local web boundary is loopback-bound by default, keeps
+credentials server-side, and uses server-rendered HTML/HTMX plus bundled TypeScript
+assets. Presentation choices must not redefine metric semantics.
 
 ### Persistence
 

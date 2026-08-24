@@ -486,9 +486,10 @@ Discover Strong Candidates
 
 ---
 
-# Suggested Architecture
+# Local Web MVP
 
-The initial version should begin as a local analytics tool.
+The next MVP interface is a localhost browser workspace. The existing CLI remains
+available for deterministic fixtures, exports, and regression automation.
 
 ```text
 Public Real-Estate APIs
@@ -497,63 +498,73 @@ Data Ingestion
         ↓
 Normalization / Apartment Matching
         ↓
-DuckDB or SQLite
+SQLite (local, single-user)
         ↓
 Analytics Layer
-        ↓
-CLI / Notebook
+        ├── CLI export/regression interface
+        └── FastAPI + Uvicorn + Jinja2 + HTMX
+                         ↓
+                    Chart.js assets
 ```
 
-Once the analytics logic and data model are validated, the project can expand into a web application.
+The browser server binds to `127.0.0.1` by default. Credentials remain server-side
+and are never sent to browser code. React/Next.js, PostgreSQL, and a separate CSS
+framework are intentionally outside the local-web MVP; see [ADR-0005](docs/decisions/ADR-0005-local-web-delivery-stack.md).
 
-```text
-FastAPI
-   ↓
-PostgreSQL
-   ↓
-React / Next.js
+## Development and quality checks
+
+```bash
+uv sync --locked --all-groups
+uv run --locked pytest -m "not e2e and not live"
+uv run --locked ruff format --check .
+uv run --locked ruff check .
+uv run --locked pyright
+
+npm ci
+npm run check
+npm run typecheck
+npm run test
+npm run build
+
+uv run --locked pre-commit run --all-files
 ```
+
+Run the foundation server locally with:
+
+```bash
+uv run --locked uvicorn apt_analyzer.web:app --host 127.0.0.1 --port 8000
+```
+
+The web application currently exposes only a health check and a placeholder page;
+search, acquisition progress, analysis, charts, and comparison remain M4 work.
 
 ---
 
-# Suggested Project Structure
+# Project Structure
 
 ```text
 apt-analyzer/
 ├── README.md
-├── ROADMAP.md
+├── docs/
+│   ├── requirements/
+│   ├── decisions/
+│   └── roadmap.md
 ├── pyproject.toml
+├── package.json
+├── frontend/
+│   └── src/
 ├── src/
 │   └── apt_analyzer/
-│       ├── api/
-│       │   ├── transactions.py
-│       │   └── apartments.py
-│       ├── ingestion/
-│       │   ├── transaction_loader.py
-│       │   └── apartment_loader.py
-│       ├── models/
-│       │   ├── apartment.py
-│       │   └── transaction.py
-│       ├── normalization/
-│       │   ├── apartment_matcher.py
-│       │   └── area_group.py
-│       ├── analytics/
-│       │   ├── liquidity/
-│       │   │   ├── turnover.py
-│       │   │   ├── retention.py
-│       │   │   └── drawdown.py
-│       │   ├── price/
-│       │   └── comparison/
-│       ├── storage/
-│       │   └── repository.py
-│       └── cli/
-│           └── main.py
+│       ├── analytics.py
+│       ├── comparison.py
+│       ├── persistence.py
+│       ├── cli.py
+│       └── web/
 ├── tests/
-│   ├── analytics/
-│   ├── normalization/
-│   └── ingestion/
-└── data/
-    └── .gitkeep
+│   ├── test_m2.py
+│   ├── test_m3.py
+│   └── test_web.py
+└── wiki/
 ```
 
 ---
@@ -571,10 +582,14 @@ apt-analyzer/
 - Maximum drawdown
 - Multi-complex comparison
 
-## P1 — High Value
+## P0 — Local-web MVP interface
 
+- Local browser workspace
 - Transaction-volume visualization
 - Price-trend visualization
+
+## P1 — High Value
+
 - Direct/cancelled transaction filters
 - Monthly and quarterly aggregation
 - Metric-based filtering

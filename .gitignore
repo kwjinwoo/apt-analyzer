@@ -221,3 +221,10 @@ __marimo__/
 .DS_Store
 .idea/
 .vscode/
+
+# Local web tooling and generated browser artifacts
+node_modules/
+src/apt_analyzer/web/static/
+playwright-report/
+test-results/
+.vitest/

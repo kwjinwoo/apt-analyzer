@@ -3,7 +3,7 @@ title: MVP Knowledge Map
 type: project
 role: topic
 status: active
-updated: 2026-08-23
+updated: 2026-08-24
 aliases:
   - MVP dependency map
 tags:
@@ -39,9 +39,13 @@ Visible analysis context
 SQLite coverage and freshness
         ↓
 Comparable apartment results
+        ↓
+Local browser workspace (M4)
 ```
 
-The dependency order explains why product UI is deferred until data and metric semantics can be validated independently.
+The dependency order explains why the browser workspace consumes validated data and
+metric semantics rather than redefining them. The local-web scaffold exists, but the
+search, update, analysis, comparison, and visualization workflow is not implemented.
 
 ## Graph connections
 
@@ -50,10 +54,12 @@ The dependency order explains why product UI is deferred until data and metric s
 - Preserves interpretation through [Analysis context](../domain/analysis-context.md).
 - Produces [Turnover rate](../metrics/turnover-rate.md), [Transaction retention rate](../metrics/transaction-retention-rate.md), and [Maximum drawdown](../metrics/maximum-drawdown.md).
 - Is constrained by unresolved dependencies in the [Open decision map](open-decision-map.md).
+- Is presented through the accepted [local browser workspace requirement](../../docs/requirements/R-020-local-browser-analysis-workspace.md)
+  and [local-web stack decision](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
 
 ## Requirements
 
-- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-019.
+- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-020.
 - The end-to-end comparison outcome is defined by [R-016](../../docs/requirements/R-016-apartment-comparison.md).
 - Reproducibility across the flow is defined by [R-019](../../docs/requirements/R-019-analysis-context.md).
 
@@ -61,6 +67,7 @@ The dependency order explains why product UI is deferred until data and metric s
 
 - [ADR-0001: Documentation as context and navigation](../../docs/decisions/ADR-0001-documentation-policy.md)
 - [ADR-0004: SQLite persistence, migrations, and monthly freshness](../../docs/decisions/ADR-0004-sqlite-persistence-and-freshness.md)
+- [ADR-0005: Local-web delivery stack](../../docs/decisions/ADR-0005-local-web-delivery-stack.md)
 - See the [Open decision map](open-decision-map.md) for unresolved domain and metric policies.
 
 ## Evidence and interpretation risks
@@ -72,7 +79,7 @@ The dependency order explains why product UI is deferred until data and metric s
 
 ## Verify in the repository
 
-M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py).
+M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py). The current web boundary is a placeholder app in [`web`](../../src/apt_analyzer/web/__init__.py) covered by [`test_web.py`](../../tests/test_web.py); it does not provide the R-020 workflow yet.
 
 ## Related pages
 

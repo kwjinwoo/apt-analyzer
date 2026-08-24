@@ -28,13 +28,14 @@ Use [TEMPLATE.md](TEMPLATE.md) when adding a requirement.
 | [R-010](R-010-transaction-retention-rate.md) | Transaction retention rate | accepted | P0 | R9 |
 | [R-011](R-011-maximum-drawdown.md) | Maximum drawdown | accepted | P0 | R10 |
 | [R-012](R-012-mdd-interval.md) | Maximum-drawdown interval | accepted | P0 | R10-1 |
-| [R-013](R-013-transaction-volume-visualization.md) | Transaction-volume visualization | accepted | P1 | R11 |
-| [R-014](R-014-price-visualization.md) | Price visualization | accepted | P1 | R12 |
+| [R-013](R-013-transaction-volume-visualization.md) | Transaction-volume visualization | accepted | P0 | R11 |
+| [R-014](R-014-price-visualization.md) | Price visualization | accepted | P0 | R12 |
 | [R-015](R-015-apartment-screening.md) | Metric-based apartment screening | accepted | P1 | R13 |
 | [R-016](R-016-apartment-comparison.md) | Apartment comparison | accepted | P0 | R14 |
 | [R-017](R-017-transaction-inclusion-policy.md) | Transaction inclusion policy | accepted | P1 | R15 |
 | [R-018](R-018-outlier-impact.md) | Outlier-impact inspection | accepted | P2 | R16 |
 | [R-019](R-019-analysis-context.md) | Visible analysis context | accepted | P0 | R17 |
+| [R-020](R-020-local-browser-analysis-workspace.md) | Local browser analysis workspace | accepted | P0 | Local-web direction |
 
 ## Change policy
 
