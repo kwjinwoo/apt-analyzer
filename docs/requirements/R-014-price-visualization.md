@@ -41,16 +41,15 @@ The user can view the representative transaction-price series over time, with mo
 
 ### Automated
 
-Not established yet.
+Observed monthly median and MDD semantics are covered by [tests/test_m2.py](../../tests/test_m2.py); [frontend chart tests](../../frontend/src/main.test.ts) preserve missing-month gaps and MDD markers, while [web contract tests](../../tests/test_web.py) verify underlying deterministic values and context. The [Chromium flow](../../tests/test_web_e2e.py) verifies the rendered price canvas and underlying table after the HTMX update/analysis interaction.
 
 ### Manual or data validation
 
-- Visual inspection will be required once a presentation interface exists.
+- On 2026-08-26, in-app browser QA confirmed post-HTMX price chart rendering, accessible values, null gaps, and visible analysis/comparison context.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet; the current web route is
-  only a scaffold.
+The deterministic browser baseline passes with installed Chromium: `uv run --locked pytest -m e2e tests/test_web_e2e.py -q` → `1 passed`. No R-014 acceptance-criterion gap remains; live real-source validation remains opt-in data validation.
 
 ## Open questions
 

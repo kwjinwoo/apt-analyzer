@@ -9,6 +9,7 @@ from apt_analyzer.acquisition import (
     ParsingError,
     ProtocolError,
     SourceOutcome,
+    load_service_key,
 )
 
 
@@ -59,3 +60,24 @@ def test_transport_retry_is_bounded_and_exhaustion_is_availability_failure() -> 
     with pytest.raises(AvailabilityError):
         client.get_xml("https://example.test", {}, source="test")
     assert calls == 3
+
+
+def test_load_service_key_prefers_process_environment_over_dotenv(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATA_GO_KR_SERVICE_KEY", "process-sentinel")
+    (tmp_path / ".env").write_text("DATA_GO_KR_SERVICE_KEY=dotenv-sentinel\n", encoding="utf-8")
+
+    assert load_service_key(tmp_path) == "process-sentinel"
+
+
+def test_load_service_key_falls_back_to_dotenv(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("DATA_GO_KR_SERVICE_KEY", raising=False)
+    (tmp_path / ".env").write_text("DATA_GO_KR_SERVICE_KEY=dotenv-sentinel\n", encoding="utf-8")
+
+    assert load_service_key(tmp_path) == "dotenv-sentinel"
+
+
+def test_load_service_key_fails_when_sources_are_missing(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("DATA_GO_KR_SERVICE_KEY", raising=False)
+
+    with pytest.raises(AuthenticationError, match="DATA_GO_KR_SERVICE_KEY"):
+        load_service_key(tmp_path)

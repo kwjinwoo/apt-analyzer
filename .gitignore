@@ -228,3 +228,4 @@ src/apt_analyzer/web/static/
 playwright-report/
 test-results/
 .vitest/
+/apt-analyzer.sqlite3

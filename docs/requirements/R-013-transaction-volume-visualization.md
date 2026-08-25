@@ -41,16 +41,15 @@ The user can view eligible transaction volume as a yearly or monthly time series
 
 ### Automated
 
-Not established yet.
+Underlying aggregation is covered by [tests/test_transaction_volume.py](../../tests/test_transaction_volume.py); [frontend chart tests](../../frontend/src/main.test.ts) preserve explicit zero values and null unavailable gaps, while [web contract tests](../../tests/test_web.py) verify deterministic accessible result data and tables. The [Chromium flow](../../tests/test_web_e2e.py) verifies the rendered volume canvas and underlying table.
 
 ### Manual or data validation
 
-- Visual inspection will be required once a presentation interface exists.
+- On 2026-08-26, in-app browser QA confirmed post-HTMX volume chart rendering, accessible underlying values, update-only rendering, comparison context/status, and no comparison-only empty charts.
 
 ### Verification gaps
 
-- AC-1 through AC-4 have no implementation evidence yet; the current web route is
-  only a scaffold.
+The deterministic browser baseline passes with installed Chromium: `uv run --locked pytest -m e2e tests/test_web_e2e.py -q` → `1 passed`. No R-013 acceptance-criterion gap remains; live real-source validation remains opt-in data validation.
 
 ## Open questions
 

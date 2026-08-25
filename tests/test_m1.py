@@ -159,7 +159,7 @@ def test_search_uses_correct_kapt_operation_and_region_evidence() -> None:
 
     service = M1Service(DataGoKrClient("abc%2Fdef", transport=transport))
     candidates = service.search("Hyundai")
-    assert "getSidoAptList3" in seen
+    assert "AptListService4/getSidoAptList4" in seen
     assert "sidoCode=11" in seen
     assert "serviceKey=abc%2Fdef" in seen
     assert candidates[0].lot_address == "Seoul Jongno Cheongun"

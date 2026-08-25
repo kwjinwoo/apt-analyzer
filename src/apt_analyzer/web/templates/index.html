@@ -1,14 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
     <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
         <title>{{ title }}</title>
+        <link rel="stylesheet" href="/static/assets/apt-analyzer-web.css">
     </head>
     <body>
-        <main>
+        <main id="workspace">
             <h1>{{ title }}</h1>
-            <p>The local browser workspace foundation is ready.</p>
-        </main>
-    </body>
-</html>
+            {% if result.subjects %}<p>Common analysis context</p>{% endif %}
+            {% if result.subjects %}<p><a href="/export?kind=comparison">Download equivalent JSON export</a></p>{% endif %}
+            {% if result and result.raw_count is defined %}<details><summary>Machine-readable result</summary><pre>{{ result|tojson(indent=2) }}</pre></details>{% endif %}
+            {% if result and result.get("update") is not none %}<section aria-labelledby="update-heading"><h2 id="update-heading">Evidence update</h2><p>SQLite update completed with per-month evidence states.</p><table><caption>Monthly update status</caption><tr><th>Month</th><th>Status</th></tr>{% for item in result.get("update").updates %}<tr><td>{{ item.month }}</td><td>{{ item.status }}</td></tr>{% endfor %}</table></section>{% set result = none %}{% endif %}
+            {% if result.subjects %}<section aria-labelledby="comparison-heading"><h2 id="comparison-heading">Comparison subjects</h2><table><caption>Subject metrics and evidence limitations</caption><tr><th>Identity</th><th>Available</th><th>Status</th><th>Reason</th><th>Raw</th><th>Eligible</th><th>MDD</th></tr>{% for subject in result.subjects %}<tr><td>{{ subject.apartment.display_name }} ({{ subject.apartment.internal_id }})</td><td>{{ subject.available }}</td><td>{{ subject.data_status|default("unavailable") }}</td><td>{{ subject.unavailable_reason if subject.unavailable_reason is not none else "-" }}</td><td>{{ subject.raw_count if subject.raw_count is not none else "Unavailable" }}</td><td>{{ subject.eligible_count if subject.eligible_count is not none else "Unavailable" }}</td><td>{{ subject.mdd.value if subject.mdd and subject.mdd.value is not none else "Unavailable" }}</td></tr>{% endfor %}</table></section>{% endif %}
+            {% if result.subjects %}<section aria-label="Comparison detail"><h3>Comparison detail and evidence</h3>{% for subject in result.subjects %}<article><h4>{{ subject.apartment.display_name }}</h4><p>Effective area: {{ subject.effective_area_key if subject.effective_area_key is not none else "All areas" }}; turnover: {{ subject.turnover.value if subject.turnover and subject.turnover.value is not none else "Unavailable" }}; retention: {{ subject.retention.value if subject.retention and subject.retention.value is not none else "Unavailable" }}; MDD: {{ subject.mdd.value if subject.mdd and subject.mdd.value is not none else "Unavailable" }}.</p><p>Peak: {{ subject.peak.month if subject.peak and subject.peak.month is not none else "Unavailable" }}; trough: {{ subject.trough.month if subject.trough and subject.trough.month is not none else "Unavailable" }}. Reason: {{ subject.unavailable_reason if subject.unavailable_reason is not none else "-" }}</p></article>{% endfor %}</section>{% endif %}
+            {% if result.subjects %}<section aria-label="Metric availability reasons">{% for subject in result.subjects %}<p>{{ subject.apartment.display_name }} — turnover: {{ subject.turnover.reason if subject.turnover and subject.turnover.value is none else "Available" }}; retention: {{ subject.retention.reason if subject.retention and subject.retention.value is none else "Available" }}; MDD: {{ subject.mdd.reason if subject.mdd and subject.mdd.value is none else "Available" }}</p>{% endfor %}</section>{% set result = none %}{% endif %}
+            <p class="state" data-state="{{ workspace.status }}">Workspace state: {{ workspace.status }}</p>
+            {% if result.error %}<p role="alert">Update/search failed: {{ result.error }}</p>{% endif %}
+            <section>
+                <h2>1. Search and select</h2>
+                <form method="post"
+                      action="/search"
+                      hx-post="/search"
+                      hx-target="#workspace"
+                      hx-swap="outerHTML">
+                    <label>
+                        Apartment name
+                        <input name="name" required></label><button>Search</button>
+                </form>
+                {% if candidates %}<p>Choose one explicit candidate; no silent name matching.</p>
+                <table>
+                    <caption>Search candidates</caption>
+                    <tr>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>Action</th>
+                    </tr>
+                    {% for candidate in candidates %}<tr><td>{{ candidate.name }}</td><td>{{ candidate.road_address }}<br>{{ candidate.lot_address }}</td><td>
+                        <form method="post"
+                              action="/select"
+                              hx-post="/select"
+                              hx-target="#workspace"
+                              hx-swap="outerHTML">
+                            <input type="hidden" name="source_id" value="{{ candidate.source_id }}"><input type="hidden" name="name" value="{{ candidate.name }}"><input type="hidden"
+       name="legal_dong_code"
+       value="{{ candidate.legal_dong_code }}"><input type="hidden" name="lot_address" value="{{ candidate.lot_address }}"><input type="hidden"
+       name="road_address"
+       value="{{ candidate.road_address }}"><button>Select</button>
+                        </form>
+                        </td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            {% endif %}
+        </section>
+        {% if workspace.apartment %}<section><h2>2. Refresh evidence</h2>
+        <p>Selected: {{ workspace.apartment.display_name }} ({{ workspace.apartment.internal_id }})</p>
+        <form method="post"
+              action="/update"
+              hx-post="/update"
+              hx-target="#workspace"
+              hx-swap="outerHTML">
+            <label>
+                Start
+                <input name="start" type="date" required></label><label>End
+                    <input name="end" type="date" required></label><label>Refresh before
+                        <input name="refresh_before" type="datetime-local"></label><button>Update SQLite</button>
+                </form>
+                </section>
+                <section>
+                    <h2>3. Analyze</h2>
+                    <form method="post"
+                          action="/analysis"
+                          hx-post="/analysis"
+                          hx-target="#workspace"
+                          hx-swap="outerHTML">
+                        <label>
+                            Overall start
+                            <input name="start" type="date" required></label><label>Overall end
+                                <input name="end" type="date" required>
+                            </label>
+                            <fieldset>
+                                <legend>Metric periods</legend>
+                                <label>
+                                    Turnover
+                                    <input name="turnover_start" type="date"><input name="turnover_end" type="date"></label><label>Baseline
+                                        <input name="baseline_start" type="date"><input name="baseline_end" type="date"></label><label>Comparison
+                                            <input name="comparison_start" type="date"><input name="comparison_end" type="date"></label><label>MDD
+                                                <input name="mdd_start" type="date"><input name="mdd_end" type="date">
+                                            </label>
+                                        </fieldset>
+                                        <fieldset><legend>Population</legend><label>Area <select name="area_group"><option value="all">All areas</option>{% for group in (result.available_area_groups if result and result.available_area_groups else []) %}<option value="{{ group.key }}">{{ group.label }}</option>{% endfor %}</select></label><label>Households <input name="household_count" type="number"><input name="household_scope" value="complex"><input name="household_source" placeholder="source"></label></fieldset>
+                                        <fieldset><legend>Inclusion policy</legend><label><input type="checkbox" name="include_cancelled"> Include cancelled</label>{% for type in ["brokered","direct","unknown"] %}<label><input type="checkbox" name="transaction_types" value="{{ type }}" checked> {{ type }}</label>{% endfor %}</fieldset><button>Analyze</button>
+                                    </form>
+                                </section>
+                            {% endif %}
+                            {% if workspace.apartments|length > 1 %}<section><h2>4. Compare</h2><form method="post"
+      action="/comparison"
+      hx-post="/comparison"
+      hx-target="#workspace"
+      hx-swap="outerHTML"><label>Subjects <select name="apartment_ids" multiple required>{% for key, apartment in workspace.apartments.items() %}<option value="{{ key }}" selected>{{ apartment.display_name }}</option>{% endfor %}</select></label><label>Area <select name="area_group"><option value="all">All areas</option>{% for groups in workspace.area_groups_by_apartment.values() %}{% for group in groups %}<option value="{{ group.key }}">{{ group.label }}</option>{% endfor %}{% endfor %}</select></label><fieldset><legend>Inclusion policy</legend><label><input type="checkbox" name="include_cancelled"> Include cancelled</label>{% for type in ["brokered","direct","unknown"] %}<label><input type="checkbox" name="transaction_types" value="{{ type }}" checked>{{ type }}</label>{% endfor %}</fieldset>{% for field in ["start", "end", "turnover_start", "turnover_end", "baseline_start", "baseline_end", "comparison_start", "comparison_end", "mdd_start", "mdd_end"] %}<input name="{{ field }}" type="date">{% endfor %}<button>Compare shared context</button></form></section>{% endif %}
+                            {% if result %}<section><h2>{% if result.config %}Common analysis context{% else %}Analysis result{% endif %}</h2>{% if result.config %}<p>Shared period: {{ result.config.overall_period.start }} to {{ result.config.overall_period.end }}</p>{% endif %}<p>Raw: {{ result.raw_count|default("-") }} · Eligible: {{ result.eligible_count|default("-") }} · Data status: {{ result.data_status|default("coverage-limited") }}</p><canvas id="volume-chart"
+        aria-label="Monthly eligible transaction volume"
+        role="img"></canvas><canvas id="price-chart"
+        aria-label="Observed monthly median price chart"
+        role="img"></canvas><h3>Underlying volume</h3><table><caption>Calendar period, count, and availability</caption><tr><th>Period</th><th>Count</th><th>Status</th></tr>{% for point in result.volume_series|default([]) %}<tr><td>{{ point.period }}</td><td>{{ point.value if point.value is not none else "Unavailable" }}</td><td>{{ point.status|default("observed") }}</td></tr>{% endfor %}</table><h3>Underlying price</h3><table><caption>Observed monthly median and transaction evidence</caption><tr><th>Period</th><th>Median</th><th>Transaction count</th><th>Status</th></tr>{% for point in result.monthly_series|default([]) %}<tr><td>{{ point.period }}</td><td>{{ point.value if point.value is not none else "Unavailable" }}</td><td>{{ point.transaction_count if point.transaction_count is not none else "Unavailable" }}</td><td>{{ point.status }}</td></tr>{% endfor %}</table>{% if result.mdd %}<p>MDD method: {{ result.mdd.price_series_method }}; missing months: {{ result.mdd.missing_month_method }}.</p><p>Peak: {{ result.mdd.peak.month if result.mdd.peak.month is not none else "Unavailable" }} / {{ result.mdd.peak.median_krw if result.mdd.peak.median_krw is not none else "Unavailable" }}; Trough: {{ result.mdd.trough.month if result.mdd.trough.month is not none else "Unavailable" }} / {{ result.mdd.trough.median_krw if result.mdd.trough.median_krw is not none else "Unavailable" }}</p>{% endif %}<a href="/export{% if result.config %}?kind=comparison{% endif %}">Download equivalent JSON export</a><pre id="analysis-data">{{ result|tojson(indent=2) }}</pre></section>{% endif %}
+                            {% if result.ui_context %}<section aria-labelledby="context-heading"><h3 id="context-heading">Analysis context and metrics</h3><dl><dt>Apartment</dt><dd>{{ result.ui_context.apartment_name }} ({{ result.ui_context.apartment_id }})</dd><dt>Overall period</dt><dd>{{ result.ui_context.overall_period.start }} to {{ result.ui_context.overall_period.end }}</dd><dt>Area</dt><dd>{{ result.ui_context.area }}</dd><dt>Inclusion policy</dt><dd>{{ result.ui_context.inclusion_policy }}</dd><dt>Raw transactions</dt><dd>{{ result.raw_count }}</dd><dt>Eligible transactions</dt><dd>{{ result.eligible_count }}</dd>{% for name, metric_period in result.ui_context.metric_periods.items() %}<dt>{{ name|capitalize }} period</dt><dd>{{ metric_period.start }} to {{ metric_period.end }}</dd>{% endfor %}<dt>Turnover</dt><dd>{{ result.turnover.value if result.turnover and result.turnover.value is not none else "Unavailable" }}</dd><dt>Retention</dt><dd>{{ result.retention.value if result.retention and result.retention.value is not none else "Unavailable" }}</dd><dt>MDD</dt><dd>{{ result.mdd.value if result.mdd and result.mdd.value is not none else "Unavailable" }}</dd></dl>{% if result.mdd %}<p>Price method: {{ result.mdd.price_series_method }}; missing-month method: {{ result.mdd.missing_month_method }}.</p><p>MDD peak: {{ result.mdd.peak.month if result.mdd.peak.month is not none else "Unavailable" }} / {{ result.mdd.peak.median_krw if result.mdd.peak.median_krw is not none else "Unavailable" }} ({{ result.mdd.peak.transaction_count if result.mdd.peak.transaction_count is not none else "Unavailable" }} transactions)</p><p>MDD trough: {{ result.mdd.trough.month if result.mdd.trough.month is not none else "Unavailable" }} / {{ result.mdd.trough.median_krw if result.mdd.trough.median_krw is not none else "Unavailable" }} ({{ result.mdd.trough.transaction_count if result.mdd.trough.transaction_count is not none else "Unavailable" }} transactions)</p>{% endif %}</section>{% endif %}<script type="module" src="/static/assets/apt-analyzer-web.js"></script>
+                        </main>
+                        <script>
+                      document.querySelectorAll('form[action="/comparison"] input[type="date"]').forEach((input) => {
+                        const labels = {start: "Overall start", end: "Overall end", turnover_start: "Turnover start", turnover_end: "Turnover end", baseline_start: "Baseline start", baseline_end: "Baseline end", comparison_start: "Comparison start", comparison_end: "Comparison end", mdd_start: "MDD start", mdd_end: "MDD end"};
+                        input.setAttribute("aria-label", labels[input.name] || input.name);
+                      });
+                        </script>
+                    </body>
+                </html>

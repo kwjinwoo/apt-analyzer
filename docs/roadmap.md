@@ -109,6 +109,21 @@ evidence, and inspect comparable liquidity and price-resilience results visually
 Regional-scale ingestion and screening are intentionally deferred until the local
 single-complex and comparison workflow has a browser acceptance baseline.
 
+Completion evidence: `apt-analyzer web` defaults to loopback and the FastAPI workspace
+provides injected search/selection, SQLite update, analysis, and deterministic export
+routes. Multi-subject comparison uses one shared `CommonAnalysisConfig` and equivalent
+JSON export. [tests/test_web.py](../tests/test_web.py) provides a deterministic TestClient
+acceptance baseline for explicit selection, update-only rendering, coverage states, and
+comparison context. [tests/test_web_e2e.py](../tests/test_web_e2e.py) drives installed
+Chromium through both-subject update, analysis charts/tables, comparison, and export;
+`uv run --locked pytest -m e2e tests/test_web_e2e.py -q` passes (`1 passed`). In-app
+browser visual QA on 2026-08-26 confirmed post-HTMX charts, accessible values,
+update-only rendering, comparison counts/status/context/export, deduplicated area
+options, and no comparison-only empty charts. The M1-M3 suites verify delegated
+identity, persistence, analytics, comparison, and CLI semantics; frontend check,
+typecheck, test, and build commands pass. M4 has no remaining acceptance-criterion gap;
+live real-source validation remains opt-in/manual data validation.
+
 ## M5: Regional ingestion and screening
 
 ### Outcome

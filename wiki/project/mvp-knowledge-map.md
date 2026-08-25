@@ -44,8 +44,10 @@ Local browser workspace (M4)
 ```
 
 The dependency order explains why the browser workspace consumes validated data and
-metric semantics rather than redefining them. The local-web scaffold exists, but the
-search, update, analysis, comparison, and visualization workflow is not implemented.
+metric semantics rather than redefining them. The local-web workspace now provides
+search/explicit selection, SQLite update, analysis, and deterministic result export
+routes around the existing M1-M3 boundaries. Frontend assets are checked and built;
+browser visual QA remains manual.
 
 ## Graph connections
 
@@ -56,6 +58,7 @@ search, update, analysis, comparison, and visualization workflow is not implemen
 - Is constrained by unresolved dependencies in the [Open decision map](open-decision-map.md).
 - Is presented through the accepted [local browser workspace requirement](../../docs/requirements/R-020-local-browser-analysis-workspace.md)
   and [local-web stack decision](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
+- Uses the [local runtime configuration](local-runtime-configuration.md) invariant for server-side credentials.
 
 ## Requirements
 
@@ -79,7 +82,7 @@ search, update, analysis, comparison, and visualization workflow is not implemen
 
 ## Verify in the repository
 
-M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py). The current web boundary is a placeholder app in [`web`](../../src/apt_analyzer/web/__init__.py) covered by [`test_web.py`](../../tests/test_web.py); it does not provide the R-020 workflow yet.
+M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py). The web boundary is implemented in [`web`](../../src/apt_analyzer/web/__init__.py) and covered by [`test_web.py`](../../tests/test_web.py).
 
 ## Related pages
 
@@ -87,3 +90,4 @@ M2 analytics and M3 persistence/comparison evidence are implemented in [`analyti
 - [Open decision map](open-decision-map.md)
 - [Analysis context](../domain/analysis-context.md)
 - [Transaction population](../data/transaction-population.md)
+- [Local runtime configuration](local-runtime-configuration.md)

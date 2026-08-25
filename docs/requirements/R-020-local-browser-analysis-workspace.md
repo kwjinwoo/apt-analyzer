@@ -57,17 +57,30 @@ the active analysis context and data availability states.
 
 ### Automated
 
-- [Web foundation contract tests](../../tests/test_web.py) — verifies the current
-  health and placeholder boundaries only; no R-020 workflow behavior is complete.
+- [Web foundation contract tests](../../tests/test_web.py) — verifies explicit
+  selection, persisted multi-subject shared-context comparison, equivalent export,
+  update-only rendering, and coverage/status semantics;
+  M1-M3 representative suites cover delegated workflow semantics.
+- [Deterministic browser acceptance](../../tests/test_web_e2e.py) — drives Chromium
+  through search, selection, update of both subjects, analysis, chart/table visibility,
+  comparison, and export without a network source.
+- [Credential composition regressions](../../tests/test_acquisition.py) and
+  [default web composition regressions](../../tests/test_web.py) — verify process
+  environment precedence, repository `.env` fallback, missing-key behavior, and that
+  the default workspace uses the canonical acquisition loader.
 
 ### Manual or data validation
 
-None yet.
+Default automated tests are deterministic and network-free. Run the browser baseline
+with `uv run --locked pytest -m e2e tests/test_web_e2e.py -q`; installed Chromium result:
+`1 passed`. In-app browser QA on 2026-08-26 confirmed update-only rendering, accessible
+values, comparison counts/status/context/export, deduplicated area options, and absence
+of comparison-only empty charts.
 
 ### Verification gaps
 
-- AC-1 through AC-6 require browser acceptance coverage after the M4 workflow is
-  implemented. The current scaffold does not claim these outcomes.
+No R-020 acceptance-criterion gap remains. Live real-source validation remains a manual
+or opt-in data-validation item because deterministic tests never call public APIs.
 
 ## Open questions
 

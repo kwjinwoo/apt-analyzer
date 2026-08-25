@@ -36,6 +36,9 @@ def main() -> None:
     compare_command = subparsers.add_parser("compare")
     compare_command.add_argument("input")
     compare_command.add_argument("--format", choices=("text", "json"), default="text")
+    web_command = subparsers.add_parser("web")
+    web_command.add_argument("--host", default="127.0.0.1")
+    web_command.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     if args.command == "analyze":
         result = analyze_input(json.loads(open(args.input, encoding="utf-8").read()))
@@ -51,6 +54,15 @@ def main() -> None:
             if args.format == "json"
             else comparison_to_text(result)
         )
+    if args.command == "web":
+        if args.host not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError("web server must bind to loopback by default")
+        import os
+
+        os.environ.setdefault("APT_ANALYZER_DB", "apt-analyzer.sqlite3")
+        import uvicorn
+
+        uvicorn.run("apt_analyzer.web:app", host=args.host, port=args.port)
 
 
 def analyze_input(payload: dict[str, Any]) -> AnalysisResult:
@@ -135,18 +147,18 @@ def compare_input(payload: dict[str, Any]) -> ComparisonResult:
 def result_to_dict(result: AnalysisResult) -> dict[str, Any]:
     """Serialize an analysis without converting Decimal monetary values to float."""
     return {
-        "context": _json_value(result.population.context),
+        "context": json_value(result.population.context),
         "raw_count": len(result.population.raw),
         "eligible_count": len(result.population.eligible),
-        "yearly_summaries": _json_value(result.yearly_summaries),
-        "monthly_prices": _json_value(result.monthly_prices),
-        "turnover": _json_value(result.turnover),
-        "retention": _json_value(result.retention),
-        "mdd": _json_value(result.mdd),
-        "annual_turnover": _json_value(result.annual_turnover),
-        "available_area_groups": _json_value(result.available_area_groups),
+        "yearly_summaries": json_value(result.yearly_summaries),
+        "monthly_prices": json_value(result.monthly_prices),
+        "turnover": json_value(result.turnover),
+        "retention": json_value(result.retention),
+        "mdd": json_value(result.mdd),
+        "annual_turnover": json_value(result.annual_turnover),
+        "available_area_groups": json_value(result.available_area_groups),
         "area_grouping_policy": result.area_grouping_policy,
-        "area_discovery_period": _json_value(result.area_discovery_period),
+        "area_discovery_period": json_value(result.area_discovery_period),
         "data_status": result.data_status,
     }
 
@@ -159,8 +171,8 @@ def result_to_text(result: AnalysisResult) -> str:
 def comparison_to_dict(result: ComparisonResult) -> dict[str, Any]:
     """Serialize comparison context and equivalent subject evidence."""
     return {
-        "config": _json_value(result.config),
-        "subjects": [_json_value(subject) for subject in result.subjects],
+        "config": json_value(result.config),
+        "subjects": [json_value(subject) for subject in result.subjects],
     }
 
 
@@ -198,22 +210,23 @@ def _optional_period(data: dict[str, str] | None) -> AnalysisPeriod | None:
     return None if data is None else _period(data)
 
 
-def _json_value(value: Any) -> Any:
+def json_value(value: Any) -> Any:
+    """Convert domain values into deterministic JSON-compatible primitives."""
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, (tuple, list)):
         sequence = cast(tuple[Any, ...] | list[Any], value)
-        return [_json_value(item) for item in sequence]
+        return [json_value(item) for item in sequence]
     if isinstance(value, (frozenset, set)):
         sequence = cast(frozenset[Any] | set[Any], value)
-        return sorted(_json_value(item) for item in sequence)
+        return sorted(json_value(item) for item in sequence)
     if hasattr(value, "__dataclass_fields__"):
-        return {key: _json_value(item) for key, item in asdict(value).items()}
+        return {key: json_value(item) for key, item in asdict(value).items()}
     if isinstance(value, dict):
         mapping = cast(dict[Any, Any], value)
-        return {str(key): _json_value(item) for key, item in mapping.items()}
+        return {str(key): json_value(item) for key, item in mapping.items()}
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)

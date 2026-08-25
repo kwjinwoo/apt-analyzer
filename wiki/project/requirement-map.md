@@ -77,7 +77,9 @@ The arrows express knowledge dependency, not implementation order or control flo
 
 ## Verify in the repository
 
-Initial domain and transaction-volume evidence is linked from R-003, R-006, R-017, and R-019. R-013, R-014, and R-020 remain implementation gaps beyond the web scaffold. Representative evidence remains linked from each Requirement document rather than duplicated in this map.
+Initial domain evidence is linked from R-003, R-006, R-017, and R-019. R-013, R-014,
+and R-020 now have local workspace implementation evidence; representative tests remain
+linked from each Requirement document rather than duplicated in this map.
 
 ## Related pages
 

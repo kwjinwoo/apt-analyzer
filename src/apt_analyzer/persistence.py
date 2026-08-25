@@ -44,10 +44,10 @@ class UpdateReport:
 class SQLiteStore:
     """Store normalized evidence, coverage, and freshness in a versioned SQLite file."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, check_same_thread: bool = False) -> None:
         """Open or create a SQLite database and migrate it to the current schema."""
         self.path = str(path)
-        self._connection = sqlite3.connect(self.path)
+        self._connection = sqlite3.connect(self.path, check_same_thread=check_same_thread)
         self._connection.row_factory = sqlite3.Row
         self._migrate()
 
