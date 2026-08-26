@@ -133,6 +133,14 @@ metric conditions without implying an investment recommendation.
 
 ### Done when
 
+- Candidate metadata can be cached and refreshed for explicitly selected regions,
+  while transaction evidence remains bounded by selected complexes or regions and
+  requested periods; no nationwide transaction-history preload is implicit.
+- Valid empty results, cache misses or stale coverage, and external-source failures
+  remain distinguishable throughout ingestion and screening.
+- Representative local storage-growth and requested-period query-performance evidence
+  has been validated before broader regional ingestion or screening is considered
+  complete, with any retention or cleanup policy made explicit.
 - Regional-scale ingestion and metric computation are reproducible.
 - Screening filters have explicit semantics and use comparable analysis contexts.
 - Missing or unavailable metrics cannot pass a filter silently.
