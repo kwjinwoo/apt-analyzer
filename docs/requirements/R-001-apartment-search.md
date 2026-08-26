@@ -44,6 +44,8 @@ The user can search for an apartment complex by name, distinguish ambiguous resu
 
 - [`test_resolution_never_auto_selects_ambiguous_candidates`](../../tests/test_m1.py) covers AC-3 and AC-4.
 - [`test_search_uses_correct_kapt_operation_and_region_evidence`](../../tests/test_m1.py) covers AC-1 and AC-2.
+- [`test_search_forwards_selected_province_to_service`](../../tests/test_web.py) covers
+  browser region selection for AC-1 and AC-2.
 - [`test_selected_candidate_is_enriched_from_kapt_detail_before_resolution`](../../tests/test_m1.py) covers detailed evidence and stable resolution for AC-2 and AC-3.
 
 ### Manual or data validation

@@ -38,13 +38,33 @@ from apt_analyzer.m1 import ApartmentCandidate, IdentityResolution, M1Service, m
 from apt_analyzer.persistence import SQLiteStore
 
 _TEMPLATE_DIRECTORY = Path(__file__).parent / "templates"
+PROVINCE_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("11", "서울특별시"),
+    ("26", "부산광역시"),
+    ("27", "대구광역시"),
+    ("28", "인천광역시"),
+    ("29", "광주광역시"),
+    ("30", "대전광역시"),
+    ("31", "울산광역시"),
+    ("36", "세종특별자치시"),
+    ("41", "경기도"),
+    ("51", "강원특별자치도"),
+    ("43", "충청북도"),
+    ("44", "충청남도"),
+    ("52", "전북특별자치도"),
+    ("46", "전라남도"),
+    ("47", "경상북도"),
+    ("48", "경상남도"),
+    ("50", "제주특별자치도"),
+)
+_PROVINCE_CODES = frozenset(code for code, _label in PROVINCE_OPTIONS)
 
 
 class SearchService(Protocol):
     """Injectable search and retrieval boundary."""
 
-    def search(self, name: str) -> tuple[ApartmentCandidate, ...]:
-        """Return distinguishable candidates for a name."""
+    def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
+        """Return distinguishable candidates for a name within one province."""
         ...
 
     def resolve(
@@ -63,7 +83,7 @@ class SearchService(Protocol):
 class MissingKeyService:
     """Fail live operations clearly when no server-side key is configured."""
 
-    def search(self, name: str) -> tuple[ApartmentCandidate, ...]:
+    def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
         """Explain that live credentials are required."""
         raise RuntimeError("DATA_GO_KR_SERVICE_KEY is required for live search")
 
@@ -88,6 +108,7 @@ class Workspace:
     apartment: Apartment | None = None
     period: AnalysisPeriod | None = None
     status: str = "idle"
+    search_sido_code: str = "11"
     apartments: dict[str, Apartment] = field(default_factory=lambda: {})
     coverage_by_apartment: dict[str, dict[str, str]] = field(default_factory=lambda: {})
     area_groups_by_apartment: dict[str, tuple[dict[str, str], ...]] = field(
@@ -127,9 +148,15 @@ def create_app(
     app.add_api_route("/health", lambda: {"status": "ok"})
 
     @app.post("/search", response_class=HTMLResponse)
-    def search(request: Request, name: str = Form(...)) -> HTMLResponse:
+    def search(
+        request: Request, name: str = Form(...), sido_code: str = Form("11")
+    ) -> HTMLResponse:
+        if sido_code not in _PROVINCE_CODES:
+            workspace.status = "failed"
+            return _page(request, templates, workspace, (), {"error": "Select a valid province."})
+        workspace.search_sido_code = sido_code
         try:
-            candidates = service.search(name)
+            candidates = service.search(name, sido_code=sido_code)
         except Exception as error:  # noqa: BLE001 - source boundary is user-visible
             workspace.status = "failed"
             return _page(request, templates, workspace, (), {"error": str(error)})
@@ -548,6 +575,7 @@ def _page(
         context={
             "title": "apt-analyzer local web",
             "workspace": workspace,
+            "province_options": PROVINCE_OPTIONS,
             "candidates": candidates,
             "result": result,
         },

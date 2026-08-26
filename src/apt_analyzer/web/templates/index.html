@@ -27,7 +27,9 @@
                       hx-swap="outerHTML">
                     <label>
                         Apartment name
-                        <input name="name" required></label><button>Search</button>
+                        <input name="name" required></label><label for="sido_code">Province</label>
+                    <select id="sido_code" name="sido_code" required>{% for code, label in province_options %}<option value="{{ code }}"
+        {{ " selected" if code == workspace.search_sido_code else "" }}>{{ label }}</option>{% endfor %}</select><button>Search</button>
                 </form>
                 {% if candidates %}<p>Choose one explicit candidate; no silent name matching.</p>
                 <table>

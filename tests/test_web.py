@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -13,7 +14,7 @@ class FakeSearch:
     def __init__(self) -> None:
         self.apartments = {"a": Apartment("a", "Alpha"), "b": Apartment("b", "Beta")}
 
-    def search(self, name: str) -> tuple[ApartmentCandidate, ...]:
+    def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
         return tuple(
             ApartmentCandidate(
                 key,
@@ -56,6 +57,22 @@ class EmptySearch(FakeSearch):
         return ()
 
 
+class RegionalSearch(FakeSearch):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sido_code = ""
+
+    def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
+        self.sido_code = sido_code
+        if sido_code != "41":
+            return ()
+        return (
+            ApartmentCandidate(
+                "gyeonggi", "원천레이크파크", "4146352000", "수원시 영통구", "경기도 수원시"
+            ),
+        )
+
+
 def test_root_route_returns_local_web_placeholder() -> None:
     client = TestClient(create_app())
 
@@ -66,6 +83,32 @@ def test_root_route_returns_local_web_placeholder() -> None:
     assert "apt-analyzer local web" in response.text
     assert 'hx-post="/search"' in response.text
     assert "service-key" not in response.text
+    assert response.text.count("<option value=") == 17
+    assert re.search(r'<option value="11"\s+selected>서울특별시</option>', response.text)
+
+
+def test_search_forwards_selected_province_to_service() -> None:
+    service = RegionalSearch()
+    client = TestClient(create_app(search_service=service, store=SQLiteStore(":memory:")))
+
+    response = client.post("/search", data={"name": "원천레이크파크", "sido_code": "41"})
+
+    assert response.status_code == 200
+    assert service.sido_code == "41"
+    assert "원천레이크파크" in response.text
+    assert "경기도 수원시" in response.text
+    assert re.search(r'<option value="41"\s+selected>경기도</option>', response.text)
+
+
+def test_search_rejects_unknown_province_code() -> None:
+    service = RegionalSearch()
+    client = TestClient(create_app(search_service=service, store=SQLiteStore(":memory:")))
+
+    response = client.post("/search", data={"name": "원천레이크파크", "sido_code": "999"})
+
+    assert response.status_code == 200
+    assert "Select a valid province" in response.text
+    assert service.sido_code == ""
 
 
 def test_health_route_reports_ready() -> None:

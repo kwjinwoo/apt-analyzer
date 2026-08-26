@@ -19,7 +19,7 @@ from apt_analyzer.web import create_app
 
 
 class BrowserFixtureService:
-    def search(self, name: str) -> tuple[ApartmentCandidate, ...]:
+    def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
         values = (("a", "Alpha"), ("b", "Beta"))
         return tuple(
             ApartmentCandidate(key, label, "1234567890", f"{label} lot", f"{label} road")
