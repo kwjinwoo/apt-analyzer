@@ -24,6 +24,7 @@ Start with the topic closest to the question, follow its graph connections, and 
 
 ## Project maps
 
+- [Regional ingestion and screening](project/regional-ingestion-and-screening.md) — M5 bounded data and scalar filters.
 - [MVP knowledge map](project/mvp-knowledge-map.md) — End-to-end dependency map for the initial product outcome.
 - [Requirement map](project/requirement-map.md) — Cross-cutting relationships among the twenty accepted requirements.
 - [Open decision map](project/open-decision-map.md) — Unresolved questions and the concepts they currently affect.

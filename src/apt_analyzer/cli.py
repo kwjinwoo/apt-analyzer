@@ -3,7 +3,7 @@
 import argparse
 import json
 from dataclasses import asdict
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
@@ -24,6 +24,18 @@ from apt_analyzer.domain import (
     TransactionInclusionPolicy,
     TransactionType,
 )
+from apt_analyzer.m1 import ApartmentCandidate, IdentityResolution, ResolutionStatus
+from apt_analyzer.m5 import (
+    SUPPORTED_METHODS,
+    CandidateRefreshState,
+    CandidateScreenRule,
+    RegionalCandidate,
+    RegionalIngestPlan,
+    SQLiteCandidateCache,
+    ingest_regional,
+    screen_candidates,
+)
+from apt_analyzer.persistence import SQLiteStore
 
 
 def main() -> None:
@@ -39,6 +51,14 @@ def main() -> None:
     web_command = subparsers.add_parser("web")
     web_command.add_argument("--host", default="127.0.0.1")
     web_command.add_argument("--port", type=int, default=8000)
+    regional = subparsers.add_parser("regional-ingest")
+    regional.add_argument("input")
+    regional.add_argument("--db", required=True)
+    regional.add_argument("--format", choices=("text", "json"), default="text")
+    screening = subparsers.add_parser("screen")
+    screening.add_argument("input")
+    screening.add_argument("--db", required=True)
+    screening.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args()
     if args.command == "analyze":
         result = analyze_input(json.loads(open(args.input, encoding="utf-8").read()))
@@ -63,6 +83,179 @@ def main() -> None:
         import uvicorn
 
         uvicorn.run("apt_analyzer.web:app", host=args.host, port=args.port)
+    if args.command == "regional-ingest":
+        payload = json.loads(open(args.input, encoding="utf-8").read())
+        output = regional_ingest_input(payload, args.db)
+        print(_cli_output(output, args.format))
+    if args.command == "screen":
+        payload = json.loads(open(args.input, encoding="utf-8").read())
+        output = screen_input(payload, args.db)
+        print(_cli_output(output, args.format))
+
+
+def regional_ingest_input(payload: dict[str, Any], db: str) -> dict[str, Any]:
+    """Run the real bounded ingestion workflow through an offline source fixture."""
+    regions = tuple(payload["regions"])
+    period = _period(payload["period"])
+    candidate_ids = frozenset(str(item) for item in payload.get("candidate_source_ids", []))
+    candidates_payload = cast(dict[str, list[dict[str, Any]]], payload["candidates_by_region"])
+    if set(candidates_payload) - set(regions):
+        raise ValueError("candidate fixture contains an out-of-plan region")
+    candidates_by_region = {
+        region: tuple(_candidate(item) for item in candidates_payload.get(region, []))
+        for region in regions
+    }
+    all_source_ids = {
+        candidate.source_id
+        for candidates in candidates_by_region.values()
+        for candidate in candidates
+    }
+    resolutions_payload = cast(dict[str, dict[str, Any]], payload.get("resolutions", {}))
+    transactions_payload = cast(dict[str, list[dict[str, Any]]], payload.get("transactions", {}))
+    if (set(resolutions_payload) | set(transactions_payload)) - all_source_ids:
+        raise ValueError("fixture resolution or transaction is outside regional candidates")
+    apartments = {
+        source_id: Apartment(value["internal_id"], value["display_name"])
+        for source_id, value in resolutions_payload.items()
+    }
+    transactions = {
+        source_id: tuple(_transaction(item) for item in values)
+        for source_id, values in transactions_payload.items()
+    }
+    for source_id, records in transactions.items():
+        apartment = apartments.get(source_id)
+        if apartment is None:
+            raise ValueError("transaction fixture requires a resolved apartment")
+        if any(
+            record.apartment_id != apartment.internal_id
+            or not period.includes(record.contract_date)
+            or record.source_name != "MOLIT apartment sale transactions"
+            for record in records
+        ):
+            raise ValueError("transaction fixture is outside the resolved candidate/period/source")
+
+    class OfflineRegionalSource:
+        def list_region(self, region: str) -> tuple[ApartmentCandidate, ...]:
+            return candidates_by_region.get(region, ())
+
+        def resolve(
+            self, candidate: ApartmentCandidate
+        ) -> tuple[ApartmentCandidate, IdentityResolution]:
+            apartment = apartments.get(candidate.source_id)
+            return candidate, IdentityResolution(
+                ResolutionStatus.RESOLVED if apartment is not None else ResolutionStatus.NOT_FOUND,
+                (candidate,),
+                apartment,
+            )
+
+        def retrieve(
+            self, candidate: ApartmentCandidate, apartment: Apartment, period: AnalysisPeriod
+        ) -> tuple[NormalizedTransaction, ...]:
+            return tuple(
+                record
+                for record in transactions.get(candidate.source_id, ())
+                if period.includes(record.contract_date)
+            )
+
+    plan = RegionalIngestPlan(regions, period, candidate_ids)
+    store = SQLiteStore(db)
+    try:
+        report = ingest_regional(plan, source=OfflineRegionalSource(), store=store)
+        return {"plan": json_value(plan), "report": json_value(report)}
+    finally:
+        store.close()
+
+
+def screen_input(payload: dict[str, Any], db: str) -> dict[str, Any]:
+    """Screen resolved regional candidates from persisted, complete monthly evidence."""
+    regions = tuple(str(item) for item in payload["regions"])
+    if not regions:
+        raise ValueError("regions must be an explicit non-empty set")
+    candidate_ids = frozenset(str(item) for item in payload.get("candidate_source_ids", []))
+    config = _common_config(payload["config"])
+    candidate_source = str(payload.get("candidate_source", "K-APT apartment list"))
+    transaction_source = str(payload.get("transaction_source", "MOLIT apartment sale transactions"))
+    cutoff_text = payload.get("candidate_refresh_before")
+    cutoff = (
+        None if not cutoff_text else datetime.fromisoformat(str(cutoff_text)).replace(tzinfo=UTC)
+    )
+    store = SQLiteStore(db)
+    try:
+        cache = SQLiteCandidateCache(store)
+        region_coverage = {
+            region: cache.read(candidate_source, region, cutoff=cutoff) for region in regions
+        }
+        unavailable_regions = {
+            region: report
+            for region, report in region_coverage.items()
+            if report.state not in {CandidateRefreshState.FRESH, CandidateRefreshState.VALID_EMPTY}
+        }
+        if unavailable_regions:
+            return {
+                "status": "unavailable",
+                "config": json_value(config),
+                "rules": [],
+                "region_coverage": json_value(region_coverage),
+                "results": [],
+                "disclaimer": (
+                    "Historical screening only; this is not an investment recommendation."
+                ),
+            }
+        resolved = store.load_resolved_candidates(candidate_source, regions, candidate_ids)
+        found_ids = {candidate.source_id for _, candidate, _ in resolved}
+        missing_ids = candidate_ids - found_ids
+        if missing_ids:
+            raise ValueError(
+                "requested candidate IDs are not resolved in selected regions: "
+                + ", ".join(sorted(missing_ids))
+            )
+        apartments = tuple(apartment for _, _, apartment in resolved)
+        transactions = {
+            a.internal_id: store.load_transactions(a.internal_id, config.overall_period)
+            for a in apartments
+        }
+        coverage = {
+            apartment.internal_id: store.coverage_states(apartment.internal_id, transaction_source)
+            for apartment in apartments
+        }
+        households = {
+            apartment_id: HouseholdEvidence(value.get("count"), value["scope"], value.get("source"))
+            for apartment_id, value in payload.get("households", {}).items()
+        }
+        rules = tuple(
+            CandidateScreenRule(
+                r["metric"],
+                r["operator"],
+                Decimal(str(r["value"])),
+                r["unit"],
+                r.get("method", SUPPORTED_METHODS[r["metric"]]),
+            )
+            for r in payload["rules"]
+        )
+        results = screen_candidates(
+            apartments,
+            transactions,
+            config,
+            rules,
+            coverage=coverage,
+            households=households,
+        )
+        return {
+            "status": "complete",
+            "config": json_value(config),
+            "rules": json_value(rules),
+            "region_coverage": json_value(region_coverage),
+            "results": json_value(results),
+            "disclaimer": "Historical screening only; this is not an investment recommendation.",
+        }
+    finally:
+        store.close()
+
+
+def _cli_output(value: dict[str, Any], output_format: str) -> str:
+    """Serialize CLI output deterministically in either equivalent format."""
+    body = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+    return body if output_format == "json" else "M5 result\n" + body
 
 
 def analyze_input(payload: dict[str, Any]) -> AnalysisResult:
@@ -118,9 +311,21 @@ def compare_input(payload: dict[str, Any]) -> ComparisonResult:
     apartments = tuple(
         Apartment(item["internal_id"], item["display_name"]) for item in payload["apartments"]
     )
-    config_data = payload["config"]
+    config = _common_config(payload["config"])
+    transactions: dict[str, tuple[NormalizedTransaction, ...]] = {}
+    for apartment_id, values in payload.get("transactions", {}).items():
+        transactions[apartment_id] = tuple(_transaction(item) for item in values)
+    households = {
+        apartment_id: HouseholdEvidence(value.get("count"), value["scope"], value.get("source"))
+        for apartment_id, value in payload.get("households", {}).items()
+    }
+    return compare(apartments, transactions, config, households)
+
+
+def _common_config(config_data: dict[str, Any]) -> CommonAnalysisConfig:
+    """Parse one explicit configuration without executing a comparison."""
     policy_data = config_data["inclusion_policy"]
-    config = CommonAnalysisConfig(
+    return CommonAnalysisConfig(
         _period(config_data["overall_period"]),
         _period(config_data["turnover_period"]),
         _period(config_data["baseline_period"]),
@@ -134,14 +339,6 @@ def compare_input(payload: dict[str, Any]) -> ComparisonResult:
         config_data.get("area_group_key"),
         config_data.get("price_series_method", "observed monthly median"),
     )
-    transactions: dict[str, tuple[NormalizedTransaction, ...]] = {}
-    for apartment_id, values in payload.get("transactions", {}).items():
-        transactions[apartment_id] = tuple(_transaction(item) for item in values)
-    households = {
-        apartment_id: HouseholdEvidence(value.get("count"), value["scope"], value.get("source"))
-        for apartment_id, value in payload.get("households", {}).items()
-    }
-    return compare(apartments, transactions, config, households)
 
 
 def result_to_dict(result: AnalysisResult) -> dict[str, Any]:
@@ -199,6 +396,16 @@ def _transaction(data: dict[str, Any]) -> NormalizedTransaction:
         data.get("source_name"),
         data.get("source_record_id"),
         tuple(tuple(item) for item in data.get("source_values", [])),
+    )
+
+
+def _candidate(data: dict[str, Any]) -> RegionalCandidate:
+    return RegionalCandidate(
+        data["source_id"],
+        data["name"],
+        data["legal_dong_code"],
+        data["lot_address"],
+        data["road_address"],
     )
 
 

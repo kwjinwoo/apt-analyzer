@@ -3,7 +3,7 @@ title: MVP Knowledge Map
 type: project
 role: topic
 status: active
-updated: 2026-08-24
+updated: 2026-08-26
 aliases:
   - MVP dependency map
 tags:
@@ -41,13 +41,15 @@ SQLite coverage and freshness
 Comparable apartment results
         ↓
 Local browser workspace (M4)
+        ↓
+Bounded regional ingestion and screening (M5)
 ```
 
 The dependency order explains why the browser workspace consumes validated data and
 metric semantics rather than redefining them. The local-web workspace now provides
 search/explicit selection, SQLite update, analysis, and deterministic result export
-routes around the existing M1-M3 boundaries. Frontend assets are checked and built;
-browser visual QA remains manual.
+routes around the existing M1-M3 boundaries. M5 reuses the same context and metrics for
+explicitly scoped regional evidence and excludes unavailable values from filters.
 
 ## Graph connections
 
@@ -59,6 +61,8 @@ browser visual QA remains manual.
 - Is presented through the accepted [local browser workspace requirement](../../docs/requirements/R-020-local-browser-analysis-workspace.md)
   and [local-web stack decision](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
 - Uses the [local runtime configuration](local-runtime-configuration.md) invariant for server-side credentials.
+- Extends into [Regional ingestion and screening](regional-ingestion-and-screening.md)
+  without an implicit nationwide transaction preload.
 
 ## Requirements
 
@@ -83,6 +87,8 @@ browser visual QA remains manual.
 ## Verify in the repository
 
 M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py). The web boundary is implemented in [`web`](../../src/apt_analyzer/web/__init__.py) and covered by [`test_web.py`](../../tests/test_web.py).
+Regional ingestion and screening are implemented in [`m5.py`](../../src/apt_analyzer/m5.py)
+and covered by [`test_m5.py`](../../tests/test_m5.py).
 
 ## Related pages
 
@@ -91,3 +97,4 @@ M2 analytics and M3 persistence/comparison evidence are implemented in [`analyti
 - [Analysis context](../domain/analysis-context.md)
 - [Transaction population](../data/transaction-population.md)
 - [Local runtime configuration](local-runtime-configuration.md)
+- [Regional ingestion and screening](regional-ingestion-and-screening.md)

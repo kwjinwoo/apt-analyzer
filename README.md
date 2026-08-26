@@ -71,6 +71,24 @@ duplicates, and keeps failed or mismatched months out of successful coverage.
 `load_transactions` supplies reproducible evidence to `compare` without a
 network call.
 
+M5 regional fixtures can be persisted and screened deterministically:
+
+```bash
+apt-analyzer regional-ingest regional.json --db regional.sqlite3 --format json
+apt-analyzer screen screen.json --db regional.sqlite3 --format json
+```
+
+Both commands accept `--format text` as an equivalent human-readable wrapper; input
+regions, periods, candidates, rules, and units must be explicit. `regional-ingest`
+accepts `candidates_by_region`, resolved apartments keyed by candidate source ID, and
+normalized transactions keyed by the same ID. It rejects candidates or transactions
+outside the declared regions and period. `screen` reads those resolved candidates from
+SQLite by explicit `regions`, applies one `config`, and evaluates `rules` containing
+`metric`, `operator`, `value`, `unit`, and an optional validated `method`. Household
+evidence is supplied by internal apartment ID when turnover is screened. Persisted
+missing, failed, valid-empty, and complete monthly evidence remains distinguishable;
+unavailable metrics never satisfy a rule.
+
 ## Current Focus
 
 The initial goal is to answer a simple question:

@@ -107,6 +107,14 @@ class M1Service:
     def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
         """Search K-APT records and return distinguishable matching candidates."""
         needle = normalize_name(name)
+        return tuple(
+            candidate
+            for candidate in self.list_region(sido_code)
+            if needle and needle in normalize_name(candidate.name)
+        )
+
+    def list_region(self, sido_code: str) -> tuple[ApartmentCandidate, ...]:
+        """List all K-APT candidates in one explicitly requested region."""
         candidates: list[ApartmentCandidate] = []
         page = 1
         while True:
@@ -122,21 +130,20 @@ class M1Service:
             )
             for row in result.records:
                 candidate_name = _pick(row, "kaptName")
-                if needle and needle in normalize_name(candidate_name):
-                    region = " ".join(
-                        value
-                        for value in (_pick(row, "as1"), _pick(row, "as2"), _pick(row, "as3"))
-                        if value
+                region = " ".join(
+                    value
+                    for value in (_pick(row, "as1"), _pick(row, "as2"), _pick(row, "as3"))
+                    if value
+                )
+                candidates.append(
+                    ApartmentCandidate(
+                        source_id=_pick(row, "kaptCode"),
+                        name=candidate_name,
+                        legal_dong_code=_pick(row, "bjdCode"),
+                        lot_address=_pick(row, "kaptAddr") or region,
+                        road_address=_pick(row, "doroJuso", "roadAddress"),
                     )
-                    candidates.append(
-                        ApartmentCandidate(
-                            source_id=_pick(row, "kaptCode"),
-                            name=candidate_name,
-                            legal_dong_code=_pick(row, "bjdCode"),
-                            lot_address=_pick(row, "kaptAddr") or region,
-                            road_address=_pick(row, "doroJuso", "roadAddress"),
-                        )
-                    )
+                )
             if len(result.records) < 1000:
                 break
             page += 1

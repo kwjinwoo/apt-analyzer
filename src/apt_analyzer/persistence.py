@@ -12,9 +12,9 @@ from decimal import Decimal
 from pathlib import Path
 
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
-from apt_analyzer.m1 import months
+from apt_analyzer.m1 import ApartmentCandidate, months
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +54,8 @@ class SQLiteStore:
     @property
     def schema_version(self) -> int:
         """Return the deterministic current schema version."""
-        return int(self._connection.execute("SELECT version FROM schema_version").fetchone()[0])
+        version = int(self._connection.execute("SELECT version FROM schema_version").fetchone()[0])
+        return version
 
     def close(self) -> None:
         """Close the underlying SQLite connection."""
@@ -69,19 +70,196 @@ class SQLiteStore:
         )
         self._connection.commit()
 
+    def save_transaction(self, transaction: NormalizedTransaction) -> bool:
+        """Persist one normalized transaction, returning whether it was new."""
+        added = self._insert_transaction(transaction)
+        self._connection.commit()
+        return added
+
     def load_transactions(
         self, apartment_id: str, period: AnalysisPeriod | None = None
     ) -> tuple[NormalizedTransaction, ...]:
         """Load stored normalized transactions, optionally bounded by an inclusive period."""
-        rows = self._connection.execute(
-            "SELECT * FROM transactions WHERE apartment_id=? ORDER BY contract_date, id",
-            (apartment_id,),
-        ).fetchall()
+        if period is None:
+            rows = self._connection.execute(
+                "SELECT * FROM transactions WHERE apartment_id=? ORDER BY contract_date, id",
+                (apartment_id,),
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                "SELECT * FROM transactions WHERE apartment_id=? AND contract_date>=? AND contract_date<=? "
+                "ORDER BY contract_date, id",
+                (apartment_id, period.start.isoformat(), period.end.isoformat()),
+            ).fetchall()
         values = tuple(_transaction_from_row(row) for row in rows)
+        return values
+
+    def save_candidate_snapshot(
+        self,
+        source_name: str,
+        region_code: str,
+        candidates: Iterable[ApartmentCandidate],
+        *,
+        fetched_at: str,
+    ) -> None:
+        """Atomically replace candidate metadata and mark successful region coverage."""
+        values = tuple(candidates)
+        with self._connection:
+            self._connection.execute(
+                "DELETE FROM region_candidates WHERE source_name=? AND region_code=?",
+                (source_name, region_code),
+            )
+            for candidate in values:
+                self._connection.execute(
+                    "INSERT INTO region_candidates(source_name, region_code, source_id, name, legal_dong_code, lot_address, road_address) VALUES (?,?,?,?,?,?,?)",
+                    (
+                        source_name,
+                        region_code,
+                        candidate.source_id,
+                        candidate.name,
+                        candidate.legal_dong_code,
+                        candidate.lot_address,
+                        candidate.road_address,
+                    ),
+                )
+            self._connection.execute(
+                "INSERT INTO region_coverage(source_name, region_code, fetched_at, result_state) VALUES (?,?,?,?) "
+                "ON CONFLICT(source_name, region_code) DO UPDATE SET fetched_at=excluded.fetched_at, result_state=excluded.result_state",
+                (source_name, region_code, fetched_at, "valid_empty" if not values else "complete"),
+            )
+            self._connection.execute(
+                "INSERT INTO region_attempts(source_name, region_code, attempted_at, status, error) "
+                "VALUES (?,?,?,?,NULL) ON CONFLICT(source_name, region_code) DO UPDATE SET "
+                "attempted_at=excluded.attempted_at, status=excluded.status, error=NULL",
+                (
+                    source_name,
+                    region_code,
+                    fetched_at,
+                    "valid_empty" if not values else "complete",
+                ),
+            )
+
+    def load_candidate_snapshot(
+        self, source_name: str, region_code: str
+    ) -> tuple[dict[str, object], ...]:
+        """Return source/region candidates in stable source-id order."""
+        rows = self._connection.execute(
+            "SELECT * FROM region_candidates WHERE source_name=? AND region_code=? ORDER BY source_id",
+            (source_name, region_code),
+        ).fetchall()
+        return tuple(
+            {
+                "source_name": str(row["source_name"]),
+                "region_code": str(row["region_code"]),
+                "source_id": str(row["source_id"]),
+                "name": str(row["name"]),
+                "legal_dong_code": str(row["legal_dong_code"]),
+                "lot_address": str(row["lot_address"]),
+                "road_address": str(row["road_address"]),
+            }
+            for row in rows
+        )
+
+    def region_coverage(self, source_name: str, region_code: str) -> dict[str, str] | None:
+        """Return persisted region coverage, or ``None`` for a cache miss."""
+        row = self._connection.execute(
+            "SELECT fetched_at, result_state FROM region_coverage WHERE source_name=? AND region_code=?",
+            (source_name, region_code),
+        ).fetchone()
+        return None if row is None else {"fetched_at": str(row[0]), "result_state": str(row[1])}
+
+    def region_attempt(self, source_name: str, region_code: str) -> dict[str, str] | None:
+        """Return the latest persisted candidate-refresh attempt."""
+        row = self._connection.execute(
+            "SELECT attempted_at, status, error FROM region_attempts "
+            "WHERE source_name=? AND region_code=?",
+            (source_name, region_code),
+        ).fetchone()
         return (
-            values
-            if period is None
-            else tuple(item for item in values if period.includes(item.contract_date))
+            None
+            if row is None
+            else {
+                "attempted_at": str(row["attempted_at"]),
+                "status": str(row["status"]),
+                "error": "" if row["error"] is None else str(row["error"]),
+            }
+        )
+
+    def record_region_failure(
+        self, source_name: str, region_code: str, *, attempted_at: str, error: str
+    ) -> None:
+        """Persist an external candidate-source failure without replacing good metadata."""
+        self._connection.execute(
+            "INSERT INTO region_attempts(source_name, region_code, attempted_at, status, error) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(source_name, region_code) DO UPDATE SET "
+            "attempted_at=excluded.attempted_at, status='failed', error=excluded.error",
+            (source_name, region_code, attempted_at, "failed", error),
+        )
+        self._connection.commit()
+
+    def link_candidate_resolution(
+        self,
+        source_name: str,
+        region_code: str,
+        source_id: str,
+        apartment_id: str,
+        *,
+        resolved_at: str,
+    ) -> None:
+        """Persist deterministic source-candidate to internal identity linkage."""
+        self._connection.execute(
+            "INSERT INTO candidate_resolution(source_name, region_code, source_id, apartment_id, resolved_at) VALUES (?,?,?,?,?) ON CONFLICT(source_name, region_code, source_id) DO UPDATE SET apartment_id=excluded.apartment_id, resolved_at=excluded.resolved_at",
+            (source_name, region_code, source_id, apartment_id, resolved_at),
+        )
+        self._connection.commit()
+
+    def candidate_resolution(
+        self, source_name: str, region_code: str, source_id: str
+    ) -> str | None:
+        """Load one candidate's linked internal apartment ID."""
+        row = self._connection.execute(
+            "SELECT apartment_id FROM candidate_resolution WHERE source_name=? AND region_code=? AND source_id=?",
+            (source_name, region_code, source_id),
+        ).fetchone()
+        return None if row is None else str(row[0])
+
+    def load_resolved_candidates(
+        self,
+        source_name: str,
+        region_codes: Iterable[str],
+        source_ids: Iterable[str] = (),
+    ) -> tuple[tuple[str, ApartmentCandidate, Apartment], ...]:
+        """Load current regional candidates that have a persisted internal identity."""
+        regions = tuple(dict.fromkeys(region_codes))
+        selected_ids = frozenset(source_ids)
+        if not regions:
+            return ()
+        placeholders = ",".join("?" for _ in regions)
+        rows = self._connection.execute(
+            "SELECT c.region_code, c.source_id, c.name, c.legal_dong_code, c.lot_address, "
+            "c.road_address, a.internal_id, a.display_name "
+            "FROM region_candidates c "
+            "JOIN candidate_resolution r ON r.source_name=c.source_name "
+            "AND r.region_code=c.region_code AND r.source_id=c.source_id "
+            "JOIN apartments a ON a.internal_id=r.apartment_id "
+            f"WHERE c.source_name=? AND c.region_code IN ({placeholders}) "
+            "ORDER BY c.region_code, c.source_id",
+            (source_name, *regions),
+        ).fetchall()
+        return tuple(
+            (
+                str(row["region_code"]),
+                ApartmentCandidate(
+                    str(row["source_id"]),
+                    str(row["name"]),
+                    str(row["legal_dong_code"]),
+                    str(row["lot_address"]),
+                    str(row["road_address"]),
+                ),
+                Apartment(str(row["internal_id"]), str(row["display_name"])),
+            )
+            for row in rows
+            if not selected_ids or str(row["source_id"]) in selected_ids
         )
 
     def coverage(self, apartment_id: str, source_name: str = "unknown") -> dict[str, str]:
@@ -91,6 +269,45 @@ class SQLiteStore:
             (apartment_id, source_name),
         )
         return {str(row[0]): str(row[1]) for row in rows}
+
+    def coverage_states(self, apartment_id: str, source_name: str = "unknown") -> dict[str, str]:
+        """Return successful months as complete or valid-empty persisted evidence."""
+        rows = self._connection.execute(
+            "SELECT c.month, a.status AS attempt_status, EXISTS("
+            "SELECT 1 FROM transactions t WHERE t.apartment_id=c.apartment_id "
+            "AND COALESCE(t.source_name, '')=c.source_name "
+            "AND REPLACE(SUBSTR(t.contract_date, 1, 7), '-', '')=c.month"
+            ") AS has_records "
+            "FROM monthly_coverage c LEFT JOIN monthly_attempts a "
+            "ON a.apartment_id=c.apartment_id AND a.source_name=c.source_name AND a.month=c.month "
+            "WHERE c.apartment_id=? AND c.source_name=? "
+            "ORDER BY c.month",
+            (apartment_id, source_name),
+        ).fetchall()
+        states = {
+            str(row["month"]): (
+                str(row["attempt_status"])
+                if row["attempt_status"] is not None
+                else ("complete" if bool(row["has_records"]) else "valid_empty")
+            )
+            for row in rows
+        }
+        failed_without_coverage = self._connection.execute(
+            "SELECT month FROM monthly_attempts WHERE apartment_id=? AND source_name=? "
+            "AND status='failed' ORDER BY month",
+            (apartment_id, source_name),
+        ).fetchall()
+        states.update({str(row["month"]): "failed" for row in failed_without_coverage})
+        return dict(sorted(states.items()))
+
+    def transaction_query_plan(self, apartment_id: str, period: AnalysisPeriod) -> str:
+        """Return SQLite's requested-period query plan for scale validation."""
+        row = self._connection.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM transactions "
+            "WHERE apartment_id=? AND contract_date>=? AND contract_date<=?",
+            (apartment_id, period.start.isoformat(), period.end.isoformat()),
+        ).fetchone()
+        return str(row["detail"])
 
     def update_incremental(
         self,
@@ -143,6 +360,18 @@ class SQLiteStore:
                     "ON CONFLICT(apartment_id, source_name, month) DO UPDATE SET fetched_at=excluded.fetched_at",
                     (apartment.internal_id, source_name, month, now),
                 )
+                self._connection.execute(
+                    "INSERT INTO monthly_attempts(apartment_id, source_name, month, attempted_at, status, error) "
+                    "VALUES (?,?,?,?,?,NULL) ON CONFLICT(apartment_id, source_name, month) DO UPDATE SET "
+                    "attempted_at=excluded.attempted_at, status=excluded.status, error=NULL",
+                    (
+                        apartment.internal_id,
+                        source_name,
+                        month,
+                        now,
+                        "valid_empty" if not records else "complete",
+                    ),
+                )
                 self._connection.commit()
                 fetched.append(month)
                 updates.append(MonthUpdate(month, "fetched", month_inserted, month_duplicates, now))
@@ -150,6 +379,13 @@ class SQLiteStore:
                 duplicates += month_duplicates
             except Exception as error:  # noqa: BLE001 - source boundary preserves failures
                 self._connection.rollback()
+                self._connection.execute(
+                    "INSERT INTO monthly_attempts(apartment_id, source_name, month, attempted_at, status, error) "
+                    "VALUES (?,?,?,?,?,?) ON CONFLICT(apartment_id, source_name, month) DO UPDATE SET "
+                    "attempted_at=excluded.attempted_at, status='failed', error=excluded.error",
+                    (apartment.internal_id, source_name, month, now, "failed", str(error)),
+                )
+                self._connection.commit()
                 failures.append(MonthUpdate(month, "failed", error=str(error)))
                 updates.append(failures[-1])
         return UpdateReport(
@@ -194,18 +430,59 @@ class SQLiteStore:
                 CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, apartment_id TEXT NOT NULL, contract_date TEXT NOT NULL, price_krw INTEGER NOT NULL, exclusive_area_sqm TEXT NOT NULL, transaction_type TEXT NOT NULL, is_cancelled INTEGER NOT NULL, floor INTEGER, building TEXT, unit TEXT, construction_year INTEGER, broker_location TEXT, source_name TEXT, source_record_id TEXT, source_values TEXT NOT NULL, source_key TEXT NOT NULL);
                 CREATE UNIQUE INDEX uq_transactions_source ON transactions(apartment_id, COALESCE(source_name, ''), source_key);
                 CREATE TABLE monthly_coverage (apartment_id TEXT NOT NULL, source_name TEXT NOT NULL, month TEXT NOT NULL, fetched_at TEXT NOT NULL, PRIMARY KEY(apartment_id, source_name, month));
-                INSERT INTO schema_version VALUES (2);
+                INSERT INTO schema_version VALUES (3);
                 """
             )
+            self._migrate_v3()
             self._connection.commit()
             return
         version = int(row[0])
-        if version not in (1, CURRENT_SCHEMA_VERSION):
+        if version not in (1, 2, CURRENT_SCHEMA_VERSION):
             raise ValueError(f"unsupported schema version: {version}")
         if version == 1:
             self._migrate_v1()
+            version = 2
+        if version in (2, CURRENT_SCHEMA_VERSION):
+            self._migrate_v3()
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS apartments (internal_id TEXT PRIMARY KEY, display_name TEXT NOT NULL)"
+        )
+        self._connection.commit()
+
+    def _migrate_v3(self) -> None:
+        """Add regional metadata and SQL-bounded transaction loading indexes."""
+        self._connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS region_candidates (
+                source_name TEXT NOT NULL, region_code TEXT NOT NULL, source_id TEXT NOT NULL,
+                name TEXT NOT NULL, legal_dong_code TEXT NOT NULL, lot_address TEXT NOT NULL,
+                road_address TEXT NOT NULL, PRIMARY KEY(source_name, region_code, source_id)
+            );
+            CREATE TABLE IF NOT EXISTS region_coverage (
+                source_name TEXT NOT NULL, region_code TEXT NOT NULL, fetched_at TEXT NOT NULL,
+                result_state TEXT NOT NULL CHECK(result_state IN ('complete', 'valid_empty')),
+                PRIMARY KEY(source_name, region_code)
+            );
+            CREATE TABLE IF NOT EXISTS region_attempts (
+                source_name TEXT NOT NULL, region_code TEXT NOT NULL, attempted_at TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('complete', 'valid_empty', 'failed')),
+                error TEXT, PRIMARY KEY(source_name, region_code)
+            );
+            CREATE TABLE IF NOT EXISTS candidate_resolution (
+                source_name TEXT NOT NULL, region_code TEXT NOT NULL, source_id TEXT NOT NULL,
+                apartment_id TEXT NOT NULL, resolved_at TEXT NOT NULL,
+                PRIMARY KEY(source_name, region_code, source_id)
+            );
+            CREATE TABLE IF NOT EXISTS monthly_attempts (
+                apartment_id TEXT NOT NULL, source_name TEXT NOT NULL, month TEXT NOT NULL,
+                attempted_at TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('complete', 'valid_empty', 'failed')),
+                error TEXT, PRIMARY KEY(apartment_id, source_name, month)
+            );
+            CREATE INDEX IF NOT EXISTS ix_transactions_apartment_contract
+                ON transactions(apartment_id, contract_date, id);
+            UPDATE schema_version SET version=3;
+            """
         )
         self._connection.commit()
 

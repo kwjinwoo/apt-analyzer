@@ -3,7 +3,7 @@ title: Requirement Map
 type: project
 role: topic
 status: active
-updated: 2026-08-24
+updated: 2026-08-26
 aliases:
   - Requirement knowledge graph
 tags:
@@ -79,11 +79,13 @@ The arrows express knowledge dependency, not implementation order or control flo
 
 Initial domain evidence is linked from R-003, R-006, R-017, and R-019. R-013, R-014,
 and R-020 now have local workspace implementation evidence; representative tests remain
-linked from each Requirement document rather than duplicated in this map.
+linked from each Requirement document rather than duplicated in this map. R-015 has
+bounded regional cache, ingestion, and screening evidence linked from its Requirement.
 
 ## Related pages
 
 - [MVP knowledge map](mvp-knowledge-map.md)
 - [Open decision map](open-decision-map.md)
+- [Regional ingestion and screening](regional-ingestion-and-screening.md)
 - [Analysis context](../domain/analysis-context.md)
 - [Transaction population](../data/transaction-population.md)

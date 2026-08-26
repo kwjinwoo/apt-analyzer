@@ -34,7 +34,7 @@ def test_legacy_v1_database_migrates_and_preserves_transaction(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 2
+    assert store.schema_version == 3
     assert store.load_transactions("apt-1") == (
         NormalizedTransaction(
             "apt-1",
@@ -109,7 +109,7 @@ def test_legacy_exact_duplicates_collapse_during_atomic_migration(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 2
+    assert store.schema_version == 3
     assert len(store.load_transactions("apt-1")) == 1
 
 
@@ -119,7 +119,7 @@ def test_invalid_schema_version_and_mismatched_month_are_failures(tmp_path):
     path = tmp_path / "future.db"
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
-        connection.execute("INSERT INTO schema_version VALUES (3)")
+        connection.execute("INSERT INTO schema_version VALUES (4)")
     import pytest
 
     with pytest.raises(ValueError, match="unsupported schema version"):

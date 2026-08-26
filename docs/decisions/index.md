@@ -20,3 +20,4 @@ Once accepted, an ADR preserves the decision made at that time. Correcting wordi
 | [ADR-0003](ADR-0003-official-sources-and-apartment-identity.md) | Official sources and apartment identity | accepted | 2026-08-22 |
 | [ADR-0004](ADR-0004-sqlite-persistence-and-freshness.md) | SQLite persistence, migrations, and monthly freshness | accepted | 2026-08-23 |
 | [ADR-0005](ADR-0005-local-web-delivery-stack.md) | Local-web delivery stack | accepted | 2026-08-24 |
+| [ADR-0006](ADR-0006-regional-cache-and-screening.md) | Regional cache and bounded screening | accepted | 2026-08-26 |

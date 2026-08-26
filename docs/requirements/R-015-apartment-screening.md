@@ -4,12 +4,12 @@ title: Metric-based apartment screening
 status: accepted
 priority: P1
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-26
 origin: "Initial requirements R13"
 supersedes: []
 superseded_by: null
 related_requirements: [R-007, R-008, R-010, R-011, R-016, R-019]
-related_decisions: []
+related_decisions: [ADR-0006]
 ---
 
 # R-015: Metric-based apartment screening
@@ -43,7 +43,15 @@ The user can filter a comparable set of apartment complexes by explicit ranges o
 
 ### Automated
 
-Not established yet.
+- [`test_screening_computes_all_metrics_with_common_area_and_household_context`](../../tests/test_m5.py)
+  covers AC-1, AC-2, and AC-4 for all six supported metrics under one common context.
+- [`test_screening_validates_units_methods_and_ne_unavailable`](../../tests/test_m5.py)
+  and [`test_screening_distinguishes_valid_empty_from_incomplete_coverage`](../../tests/test_m5.py)
+  cover AC-1 and AC-3, including the rule that an unavailable metric cannot pass `ne`.
+- [`test_real_m5_cli_json_and_text_are_equivalent`](../../tests/test_m5.py) covers
+  equivalent reproducible output and the AC-5 historical-screening disclaimer.
+- Regional cache, ingestion bounds, schema migration, and indexed requested-period
+  evidence are covered by the other representative M5 acceptance tests in that module.
 
 ### Manual or data validation
 
@@ -51,7 +59,8 @@ Not established yet.
 
 ### Verification gaps
 
-- AC-1 through AC-5 have no implementation evidence yet.
+- Automated fixtures cover AC-1 through AC-5. Multi-region real-source membership remains
+  a manual data-validation activity because deterministic tests do not call external APIs.
 
 ## Open questions
 

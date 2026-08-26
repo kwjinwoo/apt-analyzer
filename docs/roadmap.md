@@ -145,6 +145,17 @@ metric conditions without implying an investment recommendation.
 - Screening filters have explicit semantics and use comparable analysis contexts.
 - Missing or unavailable metrics cannot pass a filter silently.
 
+M5 completion evidence (2026-08-26): `src/apt_analyzer/m5.py` and SQLite schema v3
+provide the bounded cache, ingestion, and screening boundaries. On this environment,
+the deterministic scale fixture reports 250 candidates, 15,000 transactions,
+empty DB 81,920 bytes, populated DB 4,263,936 bytes, growth 4,182,016 bytes, 750
+requested-period rows, 3.905 ms, and an indexed query plan. Timing is informational
+and environment-dependent; the acceptance check is the explicit SQLite index plan.
+`tests/test_m5.py` covers persisted region freshness/failure states, bounded ingestion,
+v2-to-v3 preservation, all screening metrics/operators, unavailable-value exclusion,
+valid-empty coverage, and equivalent real CLI JSON/text output. The retention policy is
+recorded in [ADR-0006](decisions/ADR-0006-regional-cache-and-screening.md).
+
 ## M6: Broader apartment analysis
 
 ### Outcome
