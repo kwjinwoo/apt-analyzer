@@ -4,16 +4,16 @@ from decimal import Decimal
 import pytest
 
 from apt_analyzer.acquisition import DataGoKrClient
-from apt_analyzer.domain import AnalysisPeriod, Apartment, TransactionType
-from apt_analyzer.m1 import (
+from apt_analyzer.apartment_data import (
     ApartmentCandidate,
+    ApartmentDataService,
     IdentityMismatchError,
-    M1Service,
     ResolutionStatus,
     months,
     normalize_transaction,
     resolve_candidate,
 )
+from apt_analyzer.domain import AnalysisPeriod, Apartment, TransactionType
 
 
 def test_selected_candidate_is_enriched_from_kapt_detail_before_resolution() -> None:
@@ -25,7 +25,7 @@ def test_selected_candidate_is_enriched_from_kapt_detail_before_resolution() -> 
         seen = url
         return detail
 
-    service = M1Service(DataGoKrClient("abc%2Fdef", transport=transport))
+    service = ApartmentDataService(DataGoKrClient("abc%2Fdef", transport=transport))
     selected = ApartmentCandidate("A14383205", "구의현대2단지", "", "서울 광진구", "")
 
     enriched, resolution = service.resolve(selected)
@@ -96,7 +96,7 @@ def test_retrieval_is_idempotent_and_enforces_date_boundaries() -> None:
        <item><aptNm>Example</aptNm><umdNm>청운동</umdNm><jibun>1</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>1,100</dealAmount><excluUseAr>84.9</excluUseAr><floor>2</floor></item>
       </items><totalCount>3</totalCount></body></response>""".encode()
     client = DataGoKrClient("encoded", transport=lambda _url, _timeout: xml)
-    service = M1Service(client)
+    service = ApartmentDataService(client)
     candidate = ApartmentCandidate("k1", "Example", "1111010100", "서울 종로구 청운동 1", "road")
 
     result = service.retrieve(
@@ -116,7 +116,7 @@ def test_retrieval_uses_legal_code_and_rejects_name_only_address_mismatch() -> N
         seen = url
         return xml
 
-    service = M1Service(DataGoKrClient("encoded", transport=transport))
+    service = ApartmentDataService(DataGoKrClient("encoded", transport=transport))
     candidate = ApartmentCandidate(
         "A1", "구의현대2단지", "1121510300", "서울 광진구 구의동 611", "road"
     )
@@ -157,7 +157,7 @@ def test_search_uses_correct_kapt_operation_and_region_evidence() -> None:
         seen = url
         return xml
 
-    service = M1Service(DataGoKrClient("abc%2Fdef", transport=transport))
+    service = ApartmentDataService(DataGoKrClient("abc%2Fdef", transport=transport))
     candidates = service.search("Hyundai")
     assert "AptListService4/getSidoAptList4" in seen
     assert "sidoCode=11" in seen

@@ -47,7 +47,7 @@ stable query-bound evidence. This is historical screening, not investment advice
 
 ## Verify in the repository
 
-Inspect [`m5.py`](../../src/apt_analyzer/m5.py),
+Inspect [`regional_screening.py`](../../src/apt_analyzer/regional_screening.py),
 [`persistence.py`](../../src/apt_analyzer/persistence.py), and
 [`validate_m5_scale.py`](../../scripts/validate_m5_scale.py). Representative contracts
 are in [`test_m5.py`](../../tests/test_m5.py), including persisted cache states, bounded

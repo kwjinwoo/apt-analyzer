@@ -87,7 +87,7 @@ explicitly scoped regional evidence and excludes unavailable values from filters
 ## Verify in the repository
 
 M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py). The web boundary is implemented in [`web`](../../src/apt_analyzer/web/__init__.py) and covered by [`test_web.py`](../../tests/test_web.py).
-Regional ingestion and screening are implemented in [`m5.py`](../../src/apt_analyzer/m5.py)
+Regional ingestion and screening are implemented in [`regional_screening.py`](../../src/apt_analyzer/regional_screening.py)
 and covered by [`test_m5.py`](../../tests/test_m5.py).
 
 ## Related pages

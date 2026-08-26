@@ -54,7 +54,7 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 
 ## Verify in the repository
 
-[`ApartmentCandidate`, `M1Service.resolve`, and `M1Service.retrieve`](../../src/apt_analyzer/m1.py) implement enrichment and evidence matching. [`test_m1.py`](../../tests/test_m1.py) verifies ambiguity, resolution, and mismatch rejection. Opt-in live validation on 2026-08-22 found 262 Seoul candidates for `현대`, then resolved and retrieved 구의현대2단지, 구의현대6단지, and 현대3 using K-APT legal-dong and full-address evidence.
+[`ApartmentCandidate`, `ApartmentDataService.resolve`, and `ApartmentDataService.retrieve`](../../src/apt_analyzer/apartment_data.py) implement enrichment and evidence matching. [`test_m1.py`](../../tests/test_m1.py) verifies ambiguity, resolution, and mismatch rejection. Opt-in live validation on 2026-08-22 found 262 Seoul candidates for `현대`, then resolved and retrieved 구의현대2단지, 구의현대6단지, and 현대3 using K-APT legal-dong and full-address evidence.
 
 ## Related pages
 

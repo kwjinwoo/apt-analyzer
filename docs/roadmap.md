@@ -145,7 +145,7 @@ metric conditions without implying an investment recommendation.
 - Screening filters have explicit semantics and use comparable analysis contexts.
 - Missing or unavailable metrics cannot pass a filter silently.
 
-M5 completion evidence (2026-08-26): `src/apt_analyzer/m5.py` and SQLite schema v3
+M5 completion evidence (2026-08-26): `src/apt_analyzer/regional_screening.py` and SQLite schema v3
 provide the bounded cache, ingestion, and screening boundaries. On this environment,
 the deterministic scale fixture reports 250 candidates, 15,000 transactions,
 empty DB 81,920 bytes, populated DB 4,263,936 bytes, growth 4,182,016 bytes, 750

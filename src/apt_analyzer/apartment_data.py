@@ -1,4 +1,4 @@
-"""M1 apartment identity and transaction-retrieval application boundary."""
+"""Apartment identity and transaction-retrieval application boundary."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def months(period: AnalysisPeriod) -> tuple[str, ...]:
     return tuple(values)
 
 
-class M1Service:
+class ApartmentDataService:
     """Coordinate source search, explicit selection, and period retrieval."""
 
     def __init__(self, client: DataGoKrClient) -> None:

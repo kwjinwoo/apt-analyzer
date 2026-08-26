@@ -4,8 +4,13 @@ from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
+from apt_analyzer.apartment_data import (
+    ApartmentCandidate,
+    ApartmentDataService,
+    IdentityResolution,
+    ResolutionStatus,
+)
 from apt_analyzer.domain import Apartment, NormalizedTransaction, TransactionType
-from apt_analyzer.m1 import ApartmentCandidate, IdentityResolution, M1Service, ResolutionStatus
 from apt_analyzer.persistence import SQLiteStore
 from apt_analyzer.web import MissingKeyService, _default_service, create_app
 
@@ -135,7 +140,7 @@ def test_default_service_uses_dotenv_credential_loader(tmp_path, monkeypatch) ->
 
     service = _default_service()
 
-    assert isinstance(service, M1Service)
+    assert isinstance(service, ApartmentDataService)
     assert not isinstance(service, MissingKeyService)
 
 

@@ -23,6 +23,12 @@ from apt_analyzer.analytics import (
     analyze,
     discover_area_groups,
 )
+from apt_analyzer.apartment_data import (
+    ApartmentCandidate,
+    ApartmentDataService,
+    IdentityResolution,
+    months,
+)
 from apt_analyzer.cli import comparison_to_dict, json_value, result_to_dict
 from apt_analyzer.comparison import CommonAnalysisConfig, compare
 from apt_analyzer.domain import (
@@ -34,7 +40,6 @@ from apt_analyzer.domain import (
     TransactionInclusionPolicy,
     TransactionType,
 )
-from apt_analyzer.m1 import ApartmentCandidate, IdentityResolution, M1Service, months
 from apt_analyzer.persistence import SQLiteStore
 
 _TEMPLATE_DIRECTORY = Path(__file__).parent / "templates"
@@ -623,7 +628,7 @@ def _default_service() -> SearchService:
         key = load_service_key()
     except AuthenticationError:
         return MissingKeyService()
-    return M1Service(DataGoKrClient(key))
+    return ApartmentDataService(DataGoKrClient(key))
 
 
 app = create_app()

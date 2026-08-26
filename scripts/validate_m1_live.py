@@ -3,8 +3,8 @@ from datetime import date
 from pathlib import Path
 
 from apt_analyzer.acquisition import DataGoKrClient, load_service_key
+from apt_analyzer.apartment_data import ApartmentCandidate, ApartmentDataService, ResolutionStatus
 from apt_analyzer.domain import AnalysisPeriod
-from apt_analyzer.m1 import ApartmentCandidate, M1Service, ResolutionStatus
 
 COMPLEXES = (
     ("A14383205", "구의현대2단지"),
@@ -26,7 +26,9 @@ def main() -> None:
     start_year, start_month = int(args.start[:4]), int(args.start[4:])
     end_year, end_month = int(args.end[:4]), int(args.end[4:])
     period = AnalysisPeriod(date(start_year, start_month, 1), _month_end(end_year, end_month))
-    service = M1Service(DataGoKrClient(load_service_key(Path.cwd()), retries=1, timeout=20))
+    service = ApartmentDataService(
+        DataGoKrClient(load_service_key(Path.cwd()), retries=1, timeout=20)
+    )
 
     ambiguous = service.search("현대")
     print(f"ambiguous_query=현대 candidates={len(ambiguous)} auto_selected=false")

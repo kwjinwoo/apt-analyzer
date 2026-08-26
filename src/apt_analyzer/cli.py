@@ -14,6 +14,7 @@ from apt_analyzer.analytics import (
     analyze,
     discover_area_groups,
 )
+from apt_analyzer.apartment_data import ApartmentCandidate, IdentityResolution, ResolutionStatus
 from apt_analyzer.comparison import CommonAnalysisConfig, ComparisonResult, compare
 from apt_analyzer.domain import (
     AnalysisContext,
@@ -24,8 +25,8 @@ from apt_analyzer.domain import (
     TransactionInclusionPolicy,
     TransactionType,
 )
-from apt_analyzer.m1 import ApartmentCandidate, IdentityResolution, ResolutionStatus
-from apt_analyzer.m5 import (
+from apt_analyzer.persistence import SQLiteStore
+from apt_analyzer.regional_screening import (
     SUPPORTED_METHODS,
     CandidateRefreshState,
     CandidateScreenRule,
@@ -35,7 +36,6 @@ from apt_analyzer.m5 import (
     ingest_regional,
     screen_candidates,
 )
-from apt_analyzer.persistence import SQLiteStore
 
 
 def main() -> None:
@@ -255,7 +255,7 @@ def screen_input(payload: dict[str, Any], db: str) -> dict[str, Any]:
 def _cli_output(value: dict[str, Any], output_format: str) -> str:
     """Serialize CLI output deterministically in either equivalent format."""
     body = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
-    return body if output_format == "json" else "M5 result\n" + body
+    return body if output_format == "json" else "Screening result\n" + body
 
 
 def analyze_input(payload: dict[str, Any]) -> AnalysisResult:

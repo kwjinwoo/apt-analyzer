@@ -15,7 +15,8 @@ from apt_analyzer.domain import (
     TransactionInclusionPolicy,
     TransactionType,
 )
-from apt_analyzer.m5 import (
+from apt_analyzer.persistence import SQLiteStore
+from apt_analyzer.regional_screening import (
     SUPPORTED_METHODS,
     CandidateCache,
     CandidateRefreshState,
@@ -26,7 +27,6 @@ from apt_analyzer.m5 import (
     ingest_regional,
     screen_candidates,
 )
-from apt_analyzer.persistence import SQLiteStore
 
 
 def _period() -> AnalysisPeriod:
@@ -124,7 +124,7 @@ def test_regional_ingest_is_bounded_and_persists_resolution_and_molit_coverage(t
             )
 
         def resolve(self, candidate):
-            from apt_analyzer.m1 import IdentityResolution, ResolutionStatus
+            from apt_analyzer.apartment_data import IdentityResolution, ResolutionStatus
 
             return candidate, IdentityResolution(
                 ResolutionStatus.RESOLVED, (candidate,), Apartment("apt-1", "A")
@@ -373,7 +373,7 @@ def test_real_m5_cli_json_and_text_are_equivalent(tmp_path) -> None:
 
     assert json.loads(ingested.stdout)["report"]["candidates_resolved"] == 1
     assert json.loads(json_result.stdout) == json.loads(
-        text_result.stdout.removeprefix("M5 result\n")
+        text_result.stdout.removeprefix("Screening result\n")
     )
 
 

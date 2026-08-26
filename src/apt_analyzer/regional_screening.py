@@ -1,4 +1,4 @@
-"""Regional candidate caching, bounded ingestion, and scalar screening (M5)."""
+"""Regional candidate caching, bounded ingestion, and scalar screening."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from apt_analyzer.analytics import (
     analyze,
     discover_area_groups,
 )
+from apt_analyzer.apartment_data import ApartmentCandidate, IdentityResolution
 from apt_analyzer.comparison import CommonAnalysisConfig
 from apt_analyzer.domain import (
     AnalysisContext,
@@ -23,7 +24,6 @@ from apt_analyzer.domain import (
     AreaSelection,
     NormalizedTransaction,
 )
-from apt_analyzer.m1 import ApartmentCandidate, IdentityResolution
 
 
 class CandidateRefreshState(StrEnum):

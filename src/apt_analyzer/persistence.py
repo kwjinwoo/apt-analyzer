@@ -11,8 +11,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
+from apt_analyzer.apartment_data import ApartmentCandidate, months
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
-from apt_analyzer.m1 import ApartmentCandidate, months
 
 CURRENT_SCHEMA_VERSION = 3
 

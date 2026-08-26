@@ -12,8 +12,8 @@ import pytest
 from playwright.sync_api import Page, expect, sync_playwright
 from uvicorn import Config, Server
 
+from apt_analyzer.apartment_data import ApartmentCandidate, IdentityResolution, ResolutionStatus
 from apt_analyzer.domain import Apartment, NormalizedTransaction, TransactionType
-from apt_analyzer.m1 import ApartmentCandidate, IdentityResolution, ResolutionStatus
 from apt_analyzer.persistence import SQLiteStore
 from apt_analyzer.web import create_app
 
