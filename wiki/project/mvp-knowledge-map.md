@@ -40,7 +40,7 @@ SQLite coverage and freshness
         ↓
 Comparable apartment results
         ↓
-Local browser workspace (M4)
+Local browser workspace (M4/M7 productization)
         ↓
 Bounded regional ingestion and screening (M5)
         ↓
@@ -72,9 +72,10 @@ redefining the liquidity core.
 
 ## Requirements
 
-- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-020.
+- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-022.
 - The end-to-end comparison outcome is defined by [R-016](../../docs/requirements/R-016-apartment-comparison.md).
 - Reproducibility across the flow is defined by [R-019](../../docs/requirements/R-019-analysis-context.md).
+- The productized browser and persisted screening outcome is defined by [R-022](../../docs/requirements/R-022-local-productized-screening.md).
 
 ## Decisions and open questions
 

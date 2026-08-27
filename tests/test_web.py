@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import date
 from decimal import Decimal
@@ -10,7 +11,7 @@ from apt_analyzer.apartment_data import (
     IdentityResolution,
     ResolutionStatus,
 )
-from apt_analyzer.domain import Apartment, NormalizedTransaction, TransactionType
+from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 from apt_analyzer.persistence import SQLiteStore
 from apt_analyzer.web import MissingKeyService, _default_service, create_app
 
@@ -123,6 +124,104 @@ def test_health_route_reports_ready() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_screening_flow_uses_persisted_regional_coverage_and_exports_equivalent_context() -> None:
+    store = SQLiteStore(":memory:")
+    period = AnalysisPeriod(date(2024, 1, 1), date(2024, 1, 31))
+    candidates = []
+    for source_id, name in (("a", "Alpha"), ("b", "Beta")):
+        apartment = Apartment(source_id, name)
+        store.save_apartment(apartment)
+        candidates.append(
+            ApartmentCandidate(source_id, name, "1111010100", f"{name} lot", f"{name} road")
+        )
+        store.link_candidate_resolution(
+            "K-APT apartment list",
+            "11",
+            source_id,
+            source_id,
+            resolved_at="2024-01-01T00:00:00+00:00",
+        )
+    store.save_candidate_snapshot(
+        "K-APT apartment list", "11", candidates, fetched_at="2024-01-01T00:00:00+00:00"
+    )
+    store.update_incremental(
+        Apartment("a", "Alpha"),
+        period,
+        lambda _month: (
+            NormalizedTransaction(
+                "a",
+                date(2024, 1, 15),
+                100,
+                Decimal("84"),
+                TransactionType.BROKERED,
+                False,
+                source_name="MOLIT apartment sale transactions",
+                source_record_id="a-1",
+            ),
+        ),
+        refresh_before=None,
+        source_name="MOLIT apartment sale transactions",
+    )
+    app = create_app(store=store)
+    client = TestClient(app)
+
+    response = client.post(
+        "/screen",
+        data={
+            "regions": "11",
+            "candidate_source_ids": "a,b",
+            "start": "2024-01-01",
+            "end": "2024-01-31",
+            "area_group": "all",
+            "transaction_types": ["brokered"],
+            "household_json": json.dumps(
+                {
+                    "a": {"count": 100, "scope": "complex", "source": "fixture-a"},
+                    "b": {"count": 200, "scope": "complex", "source": "fixture-b"},
+                }
+            ),
+            "rules": json.dumps(
+                [
+                    {
+                        "metric": "transaction_count",
+                        "operator": "gte",
+                        "value": "1",
+                        "unit": "count",
+                        "method": "overall-period eligible population",
+                    }
+                ]
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Historical screening only" in response.text
+    assert "Alpha" in response.text and "Beta" in response.text
+    assert "included" in response.text
+    assert "Analysis result" not in response.text
+    assert 'id="price-chart"' not in response.text
+    assert "Download equivalent JSON export" not in response.text
+    assert "overall-period eligible population" in response.text
+    assert "brokered" in response.text
+    assert "fixture-a" in response.text
+    assert "Regional coverage" in response.text
+    exported = client.get("/export?kind=screening")
+    assert exported.status_code == 200
+    payload = exported.json()
+    assert payload["status"] == "complete"
+    assert payload["config"]["overall_period"] == {"start": "2024-01-01", "end": "2024-01-31"}
+    assert payload["rules"][0]["metric"] == "transaction_count"
+    assert payload["rules"][0]["method"] == "overall-period eligible population"
+    assert payload["config"]["inclusion_policy"]["included_transaction_types"] == ["brokered"]
+    assert payload["households"]["a"]["count"] == 100
+    assert payload["households"]["b"]["count"] == 200
+    results = {item["candidate_id"]: item for item in payload["results"]}
+    assert results["a"]["included"] is True
+    assert results["a"]["values"]["transaction_count"] == "1"
+    assert results["b"]["included"] is False
+    assert "coverage" in results["b"]["unavailable"]
 
 
 def test_configured_secret_never_reaches_html_or_export(monkeypatch) -> None:

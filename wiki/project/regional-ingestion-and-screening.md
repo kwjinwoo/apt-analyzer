@@ -23,7 +23,10 @@ Regions and requested periods are explicit. Candidate cache states distinguish v
 empty, miss/stale, and external failure. Successful coverage and the latest source
 attempt are persisted separately, so a later failure does not erase usable evidence.
 Transaction evidence carries complete, valid-empty, or failed monthly state. Screening
-shares one analysis configuration; unavailable metrics cannot satisfy a rule.
+shares one analysis configuration; unavailable metrics cannot satisfy a rule. The M7
+local browser workspace exposes this persisted workflow at `/screen` and provides an
+equivalent `/export?kind=screening` JSON contract with visible values, coverage,
+context, and the historical non-recommendation disclaimer.
 
 ## Graph connections
 
@@ -34,6 +37,7 @@ shares one analysis configuration; unavailable metrics cannot satisfy a rule.
 ## Requirements
 
 - [R-015 apartment screening](../../docs/requirements/R-015-apartment-screening.md)
+- [R-022 local productized analysis and screening workspace](../../docs/requirements/R-022-local-productized-screening.md)
 
 ## Decisions and open questions
 
@@ -47,12 +51,14 @@ stable query-bound evidence. This is historical screening, not investment advice
 
 ## Verify in the repository
 
-Inspect [`regional_screening.py`](../../src/apt_analyzer/regional_screening.py),
+Inspect [`regional_screening.py`](../../src/apt_analyzer/regional_screening.py) and
+the `/screen` route in [`web/__init__.py`](../../src/apt_analyzer/web/__init__.py),
 [`persistence.py`](../../src/apt_analyzer/persistence.py), and
 [`validate_m5_scale.py`](../../scripts/validate_m5_scale.py). Representative contracts
 are in [`test_m5.py`](../../tests/test_m5.py), including persisted cache states, bounded
 ingestion, schema migration/index evidence, comparable metrics, missing-value exclusion,
-and real CLI JSON/text equivalence.
+and real CLI JSON/text equivalence. The product interface contract is covered by
+[`test_web.py`](../../tests/test_web.py).
 
 ## Related pages
 

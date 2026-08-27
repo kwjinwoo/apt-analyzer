@@ -206,6 +206,13 @@ The validated analytics workflow is available through a maintainable product int
 - Search, single-complex analysis, comparison, visualization, and screening are available through the product interface.
 - User-visible metric limitations and analysis context remain explicit.
 
+M7 completion evidence (2026-08-27): [R-022](requirements/R-022-local-productized-screening.md)
+and the localhost web contract in [`test_web.py`](../tests/test_web.py) cover the
+productized analysis and persisted regional screening workflow. The web route
+reuses the M5 screening domain and SQLite coverage states, and the README documents
+locked install/start, persistent database, bounded updates, reproduction, exports,
+verification, backup/recovery, and user-visible limitations.
+
 ## Deferred product directions
 
 - Composite liquidity scores, until metric distributions and correlations are validated

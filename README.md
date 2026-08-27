@@ -560,8 +560,19 @@ Run the foundation server locally with:
 uv run --locked uvicorn apt_analyzer.web:app --host 127.0.0.1 --port 8000
 ```
 
-The web application currently exposes only a health check and a placeholder page;
-search, acquisition progress, analysis, charts, and comparison remain M4 work.
+Set `APT_ANALYZER_DB` to choose a persistent SQLite file before starting the server
+(the CLI defaults to `apt-analyzer.sqlite3`). Use the browser to search/select,
+update bounded periods, analyze, compare, visualize, and screen explicitly persisted
+regional candidates. Screening rules must include metric, operator, value, unit, and
+common periods; turnover requires explicit household evidence. Export the equivalent
+JSON from the interface or reproduce it with `apt-analyzer screen INPUT --db DB
+--format json`. Missing, failed, valid-empty, and zero-valued evidence remain distinct;
+screening is historical evidence only and is not an investment recommendation.
+
+For backup, stop the local server and copy the selected SQLite file together with its
+input fixture. Recovery is replacing the configured database with that verified copy.
+Run `uv run --locked pytest -m "not e2e and not live"` and the quality commands above
+to verify a local installation; deterministic tests never call live sources.
 
 ---
 

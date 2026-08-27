@@ -37,6 +37,7 @@ Use [TEMPLATE.md](TEMPLATE.md) when adding a requirement.
 | [R-019](R-019-analysis-context.md) | Visible analysis context | accepted | P0 | R17 |
 | [R-020](R-020-local-browser-analysis-workspace.md) | Local browser analysis workspace | accepted | P0 | Local-web direction |
 | [R-021](R-021-regional-relative-profile.md) | Regional relative profile | accepted | P2 | Roadmap M6 |
+| [R-022](R-022-local-productized-screening.md) | Local productized analysis and screening workspace | accepted | P0 | Roadmap M7 |
 
 ## Change policy
 

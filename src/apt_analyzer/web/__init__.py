@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import calendar
+import json
 import os
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -41,6 +43,13 @@ from apt_analyzer.domain import (
     TransactionType,
 )
 from apt_analyzer.persistence import SQLiteStore
+from apt_analyzer.regional_screening import (
+    SUPPORTED_METHODS,
+    CandidateRefreshState,
+    CandidateScreenRule,
+    SQLiteCandidateCache,
+    screen_candidates,
+)
 
 _TEMPLATE_DIRECTORY = Path(__file__).parent / "templates"
 PROVINCE_OPTIONS: tuple[tuple[str, str], ...] = (
@@ -430,8 +439,181 @@ def create_app(
 
     @app.get("/export")
     def export(kind: str = "analysis") -> JSONResponse:
-        key = "last_comparison" if kind == "comparison" else "last_result"
+        key = (
+            "last_comparison"
+            if kind == "comparison"
+            else "last_screening"
+            if kind == "screening"
+            else "last_result"
+        )
         return JSONResponse(getattr(app.state, key, {"status": "analysis_required"}))
+
+    @app.post("/screen", response_class=HTMLResponse)
+    def screening(
+        request: Request,
+        regions: str = Form(...),
+        candidate_source_ids: str = Form(""),
+        start: str = Form(""),
+        end: str = Form(""),
+        screen_start: str | None = Form(None),
+        screen_end: str | None = Form(None),
+        rules: str = Form(...),
+        area_group: str = Form("all"),
+        include_cancelled: bool = Form(False),
+        transaction_types: list[str] = Form(["brokered", "direct", "unknown"]),  # noqa: B008
+        turnover_start: str = Form(""),
+        turnover_end: str = Form(""),
+        baseline_start: str = Form(""),
+        baseline_end: str = Form(""),
+        comparison_start: str = Form(""),
+        comparison_end: str = Form(""),
+        mdd_start: str = Form(""),
+        mdd_end: str = Form(""),
+        household_json: str = Form(""),
+    ) -> HTMLResponse:
+        selected_regions = tuple(
+            dict.fromkeys(item.strip() for item in regions.split(",") if item.strip())
+        )
+        if not selected_regions:
+            return _page(request, templates, workspace, (), {"error": "regions must be explicit"})
+        overall_start = start or screen_start or ""
+        overall_end = end or screen_end or ""
+        if not overall_start or not overall_end:
+            return _page(
+                request, templates, workspace, (), {"error": "screening period is required"}
+            )
+        try:
+            overall = AnalysisPeriod(
+                date.fromisoformat(overall_start), date.fromisoformat(overall_end)
+            )
+            config = CommonAnalysisConfig(
+                overall,
+                _form_period(turnover_start, turnover_end, overall),
+                _form_period(baseline_start, baseline_end, overall),
+                _form_period(comparison_start, comparison_end, overall),
+                _form_period(mdd_start, mdd_end, overall),
+                TransactionInclusionPolicy(
+                    include_cancelled,
+                    frozenset(TransactionType(item) for item in transaction_types),
+                ),
+                area_group_key=None if area_group == "all" else area_group,
+            )
+            rule_payload = json.loads(rules)
+            parsed_rules = tuple(
+                CandidateScreenRule(
+                    item["metric"],
+                    item["operator"],
+                    Decimal(str(item["value"])),
+                    item["unit"],
+                    item.get("method", SUPPORTED_METHODS[item["metric"]]),
+                )
+                for item in rule_payload
+            )
+            candidate_ids = frozenset(
+                item.strip() for item in candidate_source_ids.split(",") if item.strip()
+            )
+            cache = SQLiteCandidateCache(owned_store)
+            source_name = "K-APT apartment list"
+            coverage_reports = {
+                region: cache.read(source_name, region) for region in selected_regions
+            }
+            if any(
+                report.state not in {CandidateRefreshState.FRESH, CandidateRefreshState.VALID_EMPTY}
+                for report in coverage_reports.values()
+            ):
+                payload: dict[str, object] = {
+                    "status": "unavailable",
+                    "config": json_value(config),
+                    "rules": json_value(parsed_rules),
+                    "region_coverage": json_value(coverage_reports),
+                    "results": [],
+                    "disclaimer": "Historical screening only; this is not an investment recommendation.",
+                }
+            else:
+                resolved = owned_store.load_resolved_candidates(
+                    source_name, selected_regions, candidate_ids
+                )
+                if candidate_ids - {candidate.source_id for _, candidate, _ in resolved}:
+                    raise ValueError("requested candidate IDs are not resolved in selected regions")
+                apartments = tuple(apartment for _, _, apartment in resolved)
+                transactions = {
+                    apartment.internal_id: owned_store.load_transactions(
+                        apartment.internal_id, overall
+                    )
+                    for apartment in apartments
+                }
+                coverage = {
+                    apartment.internal_id: owned_store.coverage_states(
+                        apartment.internal_id, "MOLIT apartment sale transactions"
+                    )
+                    for apartment in apartments
+                }
+                household_payload: object = json.loads(household_json) if household_json else {}
+                if not isinstance(household_payload, dict):
+                    raise ValueError("households must be a JSON object keyed by apartment ID")
+                households: dict[str, HouseholdEvidence] = {}
+                apartment_ids = {item.internal_id for item in apartments}
+                for apartment_id, raw_value in cast(
+                    dict[object, object], household_payload
+                ).items():
+                    if not isinstance(apartment_id, str) or not isinstance(raw_value, dict):
+                        raise ValueError(
+                            "each household entry must be an object keyed by apartment ID"
+                        )
+                    value = cast(dict[str, object], raw_value)
+                    if apartment_id not in apartment_ids:
+                        continue
+                    scope = value.get("scope")
+                    if not isinstance(scope, str):
+                        raise ValueError("each household entry requires a scope")
+                    count = value.get("count")
+                    if count is not None and not isinstance(count, int):
+                        raise ValueError("household count must be an integer")
+                    source = value.get("source")
+                    if source is not None and not isinstance(source, str):
+                        raise ValueError("household source must be text")
+                    households[apartment_id] = HouseholdEvidence(count, scope, source)
+                results = screen_candidates(
+                    apartments,
+                    transactions,
+                    config,
+                    parsed_rules,
+                    coverage=coverage,
+                    households=households,
+                )
+                serialized_results = json_value(results)
+                names = {apartment.internal_id: apartment.display_name for apartment in apartments}
+                for item in serialized_results:
+                    item["candidate_name"] = names[item["candidate_id"]]
+                    item["context"]["overall_period"] = _period_dict(overall)
+                payload = {
+                    "status": "complete",
+                    "regions": selected_regions,
+                    "config": json_value(config),
+                    "rules": json_value(parsed_rules),
+                    "region_coverage": json_value(coverage_reports),
+                    "results": serialized_results,
+                    "households": json_value(households),
+                    "context": {
+                        "area_group": config.area_group_key or "all",
+                        "inclusion_policy": json_value(config.inclusion_policy),
+                        "metric_periods": {
+                            "turnover": _period_dict(config.turnover_period),
+                            "baseline": _period_dict(config.baseline_period),
+                            "comparison": _period_dict(config.comparison_period),
+                            "mdd": _period_dict(config.mdd_period),
+                        },
+                    },
+                    "disclaimer": "Historical screening only; this is not an investment recommendation.",
+                }
+            app.state.last_screening = payload
+            workspace.status = (
+                "screened" if payload["status"] == "complete" else "screening-unavailable"
+            )
+            return _page(request, templates, workspace, (), payload)
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            workspace.status = "screening-failed"
+            return _page(request, templates, workspace, (), {"error": str(error)})
 
     @app.post("/comparison", response_class=HTMLResponse, response_model=None)
     def comparison(
@@ -563,7 +745,7 @@ def create_app(
             serialized,
         )
 
-    _ = (root, search, select, update, analysis, export, comparison)
+    _ = (root, search, select, update, analysis, export, screening, comparison)
     return app
 
 
