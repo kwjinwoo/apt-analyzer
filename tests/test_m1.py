@@ -30,7 +30,7 @@ def test_selected_candidate_is_enriched_from_kapt_detail_before_resolution() -> 
 
     enriched, resolution = service.resolve(selected)
 
-    assert "AptBasisInfoServiceV4/getAphusBassInfoV4" in seen
+    assert "AptBasisInfoServiceV5/getAphusBassInfoV5" in seen
     assert "kaptCode=A14383205" in seen
     assert enriched.legal_dong_code == "1121510300"
     assert enriched.lot_address.endswith("구의동 611")

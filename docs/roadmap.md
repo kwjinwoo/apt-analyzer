@@ -170,6 +170,29 @@ Candidate domains include long-term price behavior, complex characteristics, nea
 - Important distributions, correlations, and data-quality limitations are understood.
 - New domains can remain independently testable and interpretable.
 
+### Done when
+
+- At least one broader domain has an accepted requirement and decision that keep its
+  meaning separate from the liquidity core.
+- Its peer population, methods, units, missingness, and interpretation limits are
+  explicit and reproducible.
+- Representative automated contracts cover calculation, unavailable states, and
+  equivalent exports.
+- Bounded real-data validation covers multiple regions and market periods without
+  implying national representativeness, prediction, or investment recommendation.
+
+M6 completion evidence (2026-08-27): [R-021](requirements/R-021-regional-relative-profile.md)
+and [ADR-0007](decisions/ADR-0007-regional-relative-analysis.md) introduce regional
+relative profiles as a downstream descriptive domain. `regional-profile` reports
+metric-specific distributions, empirical midrank percentiles, and pairwise-complete
+Spearman correlations while preserving upstream methods and unavailable states.
+`tests/test_m6.py` covers ties, missing values, constant or insufficient correlation
+evidence, persisted coverage, and equivalent CLI exports. A bounded live run across
+seven explicitly selected complexes in each of Seoul, Busan, and Gyeonggi for 2022-2024
+produced 21 complete price/area/count/turnover/MDD observations and 18 retention
+observations; the other three exposed zero-baseline unavailability. The script is
+`scripts/validate_m6_live.py`. Other candidate domains remain future independent work.
+
 ## M7: Productization
 
 ### Outcome

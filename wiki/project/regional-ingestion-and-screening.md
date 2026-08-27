@@ -3,7 +3,7 @@ title: Regional ingestion and screening
 type: project
 role: topic
 status: active
-updated: 2026-08-26
+updated: 2026-08-27
 aliases: []
 tags:
   - regional-ingestion
@@ -57,3 +57,4 @@ and real CLI JSON/text equivalence.
 ## Related pages
 
 - [MVP knowledge map](mvp-knowledge-map.md)
+- [Regional relative analysis](regional-relative-analysis.md)

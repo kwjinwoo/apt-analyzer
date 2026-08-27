@@ -25,8 +25,9 @@ Start with the topic closest to the question, follow its graph connections, and 
 ## Project maps
 
 - [Regional ingestion and screening](project/regional-ingestion-and-screening.md) — M5 bounded data and scalar filters.
+- [Regional relative analysis](project/regional-relative-analysis.md) — M6 distributions, empirical percentiles, and pairwise correlations for explicit peer groups.
 - [MVP knowledge map](project/mvp-knowledge-map.md) — End-to-end dependency map for the initial product outcome.
-- [Requirement map](project/requirement-map.md) — Cross-cutting relationships among the twenty accepted requirements.
+- [Requirement map](project/requirement-map.md) — Cross-cutting relationships among the twenty-one accepted requirements.
 - [Open decision map](project/open-decision-map.md) — Unresolved questions and the concepts they currently affect.
 - [Local runtime configuration](project/local-runtime-configuration.md) — Server-side credential loading and local workspace configuration invariants.
 

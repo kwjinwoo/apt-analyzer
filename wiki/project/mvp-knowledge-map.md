@@ -3,7 +3,7 @@ title: MVP Knowledge Map
 type: project
 role: topic
 status: active
-updated: 2026-08-26
+updated: 2026-08-27
 aliases:
   - MVP dependency map
 tags:
@@ -43,13 +43,17 @@ Comparable apartment results
 Local browser workspace (M4)
         ↓
 Bounded regional ingestion and screening (M5)
+        ↓
+Independent regional relative analysis (M6)
 ```
 
 The dependency order explains why the browser workspace consumes validated data and
 metric semantics rather than redefining them. The local-web workspace now provides
 search/explicit selection, SQLite update, analysis, and deterministic result export
 routes around the existing M1-M3 boundaries. M5 reuses the same context and metrics for
-explicitly scoped regional evidence and excludes unavailable values from filters.
+explicitly scoped regional evidence and excludes unavailable values from filters. M6
+consumes those values and unavailable states to describe explicit peer groups without
+redefining the liquidity core.
 
 ## Graph connections
 
@@ -63,6 +67,8 @@ explicitly scoped regional evidence and excludes unavailable values from filters
 - Uses the [local runtime configuration](local-runtime-configuration.md) invariant for server-side credentials.
 - Extends into [Regional ingestion and screening](regional-ingestion-and-screening.md)
   without an implicit nationwide transaction preload.
+- Continues into [Regional relative analysis](regional-relative-analysis.md) with
+  metric-specific populations and descriptive interpretation limits.
 
 ## Requirements
 
@@ -89,6 +95,8 @@ explicitly scoped regional evidence and excludes unavailable values from filters
 M2 analytics and M3 persistence/comparison evidence are implemented in [`analytics.py`](../../src/apt_analyzer/analytics.py), [`persistence.py`](../../src/apt_analyzer/persistence.py), and [`comparison.py`](../../src/apt_analyzer/comparison.py). Representative M3 tests are in [`test_m3.py`](../../tests/test_m3.py); the CLI entry point is [`cli.py`](../../src/apt_analyzer/cli.py). The web boundary is implemented in [`web`](../../src/apt_analyzer/web/__init__.py) and covered by [`test_web.py`](../../tests/test_web.py).
 Regional ingestion and screening are implemented in [`regional_screening.py`](../../src/apt_analyzer/regional_screening.py)
 and covered by [`test_m5.py`](../../tests/test_m5.py).
+Regional relative profiles are implemented in [`regional_profile.py`](../../src/apt_analyzer/regional_profile.py)
+and covered by [`test_m6.py`](../../tests/test_m6.py).
 
 ## Related pages
 
@@ -98,3 +106,4 @@ and covered by [`test_m5.py`](../../tests/test_m5.py).
 - [Transaction population](../data/transaction-population.md)
 - [Local runtime configuration](local-runtime-configuration.md)
 - [Regional ingestion and screening](regional-ingestion-and-screening.md)
+- [Regional relative analysis](regional-relative-analysis.md)

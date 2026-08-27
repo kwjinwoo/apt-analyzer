@@ -3,7 +3,7 @@ title: Local Runtime Configuration
 type: project
 role: topic
 status: active
-updated: 2026-08-26
+updated: 2026-08-27
 aliases:
   - Local credential configuration
   - Runtime service key loading
@@ -26,6 +26,13 @@ All live interfaces reuse `apt_analyzer.acquisition.load_service_key()`. The pro
 The M4 default web composition previously duplicated lookup with a process-environment-only read. That caused a configured local `.env` to be ignored and selected `MissingKeyService`; the prevention rule is to delegate credential lookup to the canonical acquisition loader.
 
 The current official K-APT apartment-list contract is `AptListService4/getSidoAptList4`, as published in the [data.go.kr API page](https://www.data.go.kr/data/15057332/openapi.do). The M1 search boundary must keep its endpoint aligned with that published operation; an older v3 operation can return `NO_OPENAPI_SERVICE_ERROR` even when credentials are valid.
+
+The current official K-APT basic-information contract is
+`AptBasisInfoServiceV5/getAphusBassInfoV5`, as published in the
+[data.go.kr API page](https://www.data.go.kr/data/15058453/openapi.do). The previous V4
+operation returned `NO_OPENAPI_SERVICE_ERROR` after the 2026-08-07 source migration;
+identity enrichment and household evidence now use V5 without changing their domain
+meaning.
 
 ## Graph connections
 
@@ -54,6 +61,7 @@ The accepted invariant is environment-over-`.env` precedence with one canonical 
 - Loader precedence/fallback/missing-source regressions: [`test_acquisition.py`](../../tests/test_acquisition.py).
 - Default composition and missing-key regressions: [`test_web.py`](../../tests/test_web.py).
 - Official K-APT list operation regression: [`test_m1.py`](../../tests/test_m1.py).
+- Official K-APT V5 detail operation regression: [`test_m1.py`](../../tests/test_m1.py).
 
 ## Related pages
 

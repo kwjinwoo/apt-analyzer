@@ -3,7 +3,7 @@ title: Requirement Map
 type: project
 role: topic
 status: active
-updated: 2026-08-26
+updated: 2026-08-27
 aliases:
   - Requirement knowledge graph
 tags:
@@ -15,7 +15,7 @@ tags:
 
 ## Scope
 
-This hub groups the twenty accepted requirements by knowledge dependency instead of repeating their normative text.
+This hub groups the twenty-one accepted requirements by knowledge dependency instead of repeating their normative text.
 
 ## Knowledge
 
@@ -44,7 +44,7 @@ Local interface
   R-020 → R-001/R-002/R-013/R-014/R-016/R-017/R-019
 
 Multi-complex use
-  R-016 → R-015
+  R-016 → R-015 → R-021
 ```
 
 The arrows express knowledge dependency, not implementation order or control flow.
@@ -58,6 +58,7 @@ The arrows express knowledge dependency, not implementation order or control flo
 - End-to-end dependency is summarized by the [MVP knowledge map](mvp-knowledge-map.md).
 - The local interface boundary is defined by [R-020](../../docs/requirements/R-020-local-browser-analysis-workspace.md)
   and [ADR-0005](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
+- Regional descriptive interpretation extends through [Regional relative analysis](regional-relative-analysis.md).
 
 ## Requirements
 
@@ -81,11 +82,13 @@ Initial domain evidence is linked from R-003, R-006, R-017, and R-019. R-013, R-
 and R-020 now have local workspace implementation evidence; representative tests remain
 linked from each Requirement document rather than duplicated in this map. R-015 has
 bounded regional cache, ingestion, and screening evidence linked from its Requirement.
+R-021 has independent profile and live multi-region evidence linked from its Requirement.
 
 ## Related pages
 
 - [MVP knowledge map](mvp-knowledge-map.md)
 - [Open decision map](open-decision-map.md)
 - [Regional ingestion and screening](regional-ingestion-and-screening.md)
+- [Regional relative analysis](regional-relative-analysis.md)
 - [Analysis context](../domain/analysis-context.md)
 - [Transaction population](../data/transaction-population.md)

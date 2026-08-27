@@ -44,6 +44,10 @@ Area selection, date boundaries, and transaction inclusion rules define the popu
 
 Metric calculations operate on normalized domain inputs and explicit context. They must not require network access or an external service in order to be unit tested.
 
+Derived descriptive analysis may consume explicit metric values and unavailable states,
+but it must not redefine upstream metric populations, units, or methods. This keeps a
+broader analysis domain independently testable from acquisition and the liquidity core.
+
 ### Interfaces
 
 CLI, comparison, screening, visualization, and the local web interface consume

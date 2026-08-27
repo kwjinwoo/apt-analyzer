@@ -149,3 +149,34 @@ drawdown = trough price / peak price - 1
 ### Interpretation constraints
 
 Apartment transactions are irregular and sparse. Long no-trade intervals, single-transaction months, heterogeneous units, direct transactions, cancellations, and unusual prices can produce a misleading drawdown. The treatment of missing months and minimum evidence thresholds requires further validation.
+
+## Regional relative profile
+
+### Purpose
+
+Describe the observed distribution and relative position of existing scalar metrics
+within an explicit regional peer group and common analysis context.
+
+### Definition
+
+For each metric, exclude unavailable values independently and report available and
+missing counts, minimum, inclusive-linear quartiles, median, and maximum. A candidate's
+empirical midrank percentile is:
+
+```text
+values below + 0.5 × tied values
+--------------------------------
+        available values
+```
+
+Pairwise relationships use Spearman correlation over midranks and expose the number of
+candidates for which both metrics are available. Fewer than two paired observations or
+a constant paired series produces an unavailable correlation rather than a numeric
+substitute.
+
+### Interpretation constraints
+
+Percentiles apply only to the displayed peer group and context. Higher does not mean
+better, and correlation does not imply causation, stability, prediction, or investment
+quality. Missing values, small samples, peer selection, transaction sparsity, area mix,
+complex size, and source corrections can materially change the result.

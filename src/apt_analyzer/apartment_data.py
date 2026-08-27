@@ -14,7 +14,7 @@ from apt_analyzer.acquisition import DataGoKrClient, ParsingError
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 
 KAPT_LIST_ENDPOINT = "https://apis.data.go.kr/1613000/AptListService4/getSidoAptList4"
-KAPT_DETAIL_ENDPOINT = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusBassInfoV4"
+KAPT_DETAIL_ENDPOINT = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusBassInfoV5"
 MOLIT_SALE_ENDPOINT = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
 
 

@@ -26,14 +26,17 @@ from apt_analyzer.domain import (
     TransactionType,
 )
 from apt_analyzer.persistence import SQLiteStore
+from apt_analyzer.regional_profile import MetricDefinition, MetricObservation, profile_metrics
 from apt_analyzer.regional_screening import (
     SUPPORTED_METHODS,
+    SUPPORTED_UNITS,
     CandidateRefreshState,
     CandidateScreenRule,
     RegionalCandidate,
     RegionalIngestPlan,
     SQLiteCandidateCache,
     ingest_regional,
+    measure_candidates,
     screen_candidates,
 )
 
@@ -59,6 +62,10 @@ def main() -> None:
     screening.add_argument("input")
     screening.add_argument("--db", required=True)
     screening.add_argument("--format", choices=("text", "json"), default="text")
+    profile = subparsers.add_parser("regional-profile")
+    profile.add_argument("input")
+    profile.add_argument("--db", required=True)
+    profile.add_argument("--format", choices=("text", "json"), default="text")
     args = parser.parse_args()
     if args.command == "analyze":
         result = analyze_input(json.loads(open(args.input, encoding="utf-8").read()))
@@ -91,6 +98,10 @@ def main() -> None:
         payload = json.loads(open(args.input, encoding="utf-8").read())
         output = screen_input(payload, args.db)
         print(_cli_output(output, args.format))
+    if args.command == "regional-profile":
+        payload = json.loads(open(args.input, encoding="utf-8").read())
+        output = regional_profile_input(payload, args.db)
+        print(_regional_profile_output(output, args.format))
 
 
 def regional_ingest_input(payload: dict[str, Any], db: str) -> dict[str, Any]:
@@ -252,10 +263,130 @@ def screen_input(payload: dict[str, Any], db: str) -> dict[str, Any]:
         store.close()
 
 
+def regional_profile_input(payload: dict[str, Any], db: str) -> dict[str, Any]:
+    """Build a descriptive profile for one explicit persisted regional peer group."""
+    regions = tuple(str(item) for item in payload["regions"])
+    if not regions or any(not region.strip() for region in regions):
+        raise ValueError("regions must be an explicit non-empty set")
+    if len(regions) != len(set(regions)):
+        raise ValueError("regions must be unique")
+    candidate_ids = frozenset(str(item) for item in payload.get("candidate_source_ids", []))
+    config = _common_config(payload["config"])
+    candidate_source = str(payload.get("candidate_source", "K-APT apartment list"))
+    transaction_source = str(payload.get("transaction_source", "MOLIT apartment sale transactions"))
+    cutoff_text = payload.get("candidate_refresh_before")
+    cutoff = (
+        None if not cutoff_text else datetime.fromisoformat(str(cutoff_text)).replace(tzinfo=UTC)
+    )
+    definitions = tuple(
+        MetricDefinition(metric, SUPPORTED_UNITS[metric], SUPPORTED_METHODS[metric])
+        for metric in SUPPORTED_UNITS
+    )
+    store = SQLiteStore(db)
+    try:
+        cache = SQLiteCandidateCache(store)
+        region_coverage = {
+            region: cache.read(candidate_source, region, cutoff=cutoff) for region in regions
+        }
+        unavailable_regions = {
+            region: report
+            for region, report in region_coverage.items()
+            if report.state not in {CandidateRefreshState.FRESH, CandidateRefreshState.VALID_EMPTY}
+        }
+        peer_group = {
+            "regions": list(regions),
+            "candidate_source_ids": sorted(candidate_ids),
+            "candidates": [],
+            "config": json_value(config),
+            "candidate_source": candidate_source,
+            "transaction_source": transaction_source,
+        }
+        if unavailable_regions:
+            return {
+                "status": "unavailable",
+                "peer_group": peer_group,
+                "metric_definitions": json_value(definitions),
+                "region_coverage": json_value(region_coverage),
+                "profile": None,
+                "disclaimer": (
+                    "Historical descriptive analysis only; this is not an investment "
+                    "recommendation, and a higher percentile does not mean better."
+                ),
+            }
+        resolved = store.load_resolved_candidates(candidate_source, regions, candidate_ids)
+        found_ids = {candidate.source_id for _, candidate, _ in resolved}
+        missing_ids = candidate_ids - found_ids
+        if missing_ids:
+            raise ValueError(
+                "requested candidate IDs are not resolved in selected regions: "
+                + ", ".join(sorted(missing_ids))
+            )
+        apartments = tuple(apartment for _, _, apartment in resolved)
+        peer_group["candidates"] = [
+            {
+                "region": region,
+                "source_id": candidate.source_id,
+                "internal_id": apartment.internal_id,
+                "display_name": apartment.display_name,
+            }
+            for region, candidate, apartment in resolved
+        ]
+        transactions = {
+            apartment.internal_id: store.load_transactions(
+                apartment.internal_id, config.overall_period
+            )
+            for apartment in apartments
+        }
+        coverage = {
+            apartment.internal_id: store.coverage_states(apartment.internal_id, transaction_source)
+            for apartment in apartments
+        }
+        households = {
+            apartment_id: HouseholdEvidence(value.get("count"), value["scope"], value.get("source"))
+            for apartment_id, value in payload.get("households", {}).items()
+        }
+        measurements = measure_candidates(
+            apartments,
+            transactions,
+            config,
+            coverage=coverage,
+            households=households,
+        )
+        observations = tuple(
+            MetricObservation(
+                item.candidate_id,
+                item.values,
+                {
+                    metric: reason
+                    for metric, reason in item.unavailable.items()
+                    if metric in SUPPORTED_UNITS
+                },
+            )
+            for item in measurements
+        )
+        result = profile_metrics(observations, definitions)
+        return {
+            "status": "valid_empty" if not observations else "complete",
+            "peer_group": peer_group,
+            "metric_definitions": json_value(definitions),
+            "region_coverage": json_value(region_coverage),
+            "profile": json_value(result),
+            "disclaimer": result.disclaimer,
+        }
+    finally:
+        store.close()
+
+
 def _cli_output(value: dict[str, Any], output_format: str) -> str:
     """Serialize CLI output deterministically in either equivalent format."""
     body = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
     return body if output_format == "json" else "Screening result\n" + body
+
+
+def _regional_profile_output(value: dict[str, Any], output_format: str) -> str:
+    """Serialize regional-profile output deterministically in equivalent formats."""
+    body = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+    return body if output_format == "json" else "Regional profile result\n" + body
 
 
 def analyze_input(payload: dict[str, Any]) -> AnalysisResult:

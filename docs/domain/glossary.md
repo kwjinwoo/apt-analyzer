@@ -50,6 +50,10 @@ The date on which a reported sale contract was made. It is the default event dat
 
 A transaction reported as occurring without a broker. Direct transactions may have different data-quality characteristics and must be distinguishable by the inclusion policy.
 
+## Empirical midrank percentile
+
+The relative position of an observed metric within an explicit peer group, calculated as the number of available values below it plus half the number tied with it, divided by the number of available values. It has no inherent favorable direction.
+
 ## Exclusive area
 
 The private floor area associated with a transaction, measured in square metres. The source value is preserved even when a derived area group is assigned.
@@ -81,6 +85,14 @@ An ordered sequence of representative price observations. For the initial MDD me
 ## Raw exclusive area
 
 The exclusive-area value as normalized from the source record before market-facing grouping.
+
+## Regional peer group
+
+The explicitly selected regions and resolved apartment candidates whose existing metrics are compared under one common analysis context. It is an analysis population, not an automatically inferred market or recommendation set.
+
+## Spearman correlation
+
+A descriptive correlation of paired midranks. In this project it uses only candidates for which both metrics are available and always carries that pairwise-complete sample count.
 
 ## Transaction inclusion policy
 

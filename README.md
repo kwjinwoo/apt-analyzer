@@ -76,6 +76,7 @@ M5 regional fixtures can be persisted and screened deterministically:
 ```bash
 apt-analyzer regional-ingest regional.json --db regional.sqlite3 --format json
 apt-analyzer screen screen.json --db regional.sqlite3 --format json
+apt-analyzer regional-profile profile.json --db regional.sqlite3 --format json
 ```
 
 Both commands accept `--format text` as an equivalent human-readable wrapper; input
@@ -88,6 +89,12 @@ SQLite by explicit `regions`, applies one `config`, and evaluates `rules` contai
 evidence is supplied by internal apartment ID when turnover is screened. Persisted
 missing, failed, valid-empty, and complete monthly evidence remains distinguishable;
 unavailable metrics never satisfy a rule.
+
+`regional-profile` reads the same explicitly bounded peer group and common `config`.
+It reports metric-specific available and missing counts, inclusive-linear
+distributions, candidate empirical midrank percentiles, and pairwise-complete Spearman
+correlations. A higher percentile is not labeled as better, and output remains
+historical descriptive evidence rather than a recommendation.
 
 ## Current Focus
 
@@ -612,12 +619,15 @@ apt-analyzer/
 - Monthly and quarterly aggregation
 - Metric-based filtering
 
+## P2 — Available
+
+- Explicit regional peer-group distributions and percentiles
+
 ## P2 — Later
 
 - Accurate household count by area type
 - Automatic outlier detection
 - Nearby-complex benchmarking
-- Regional percentile analysis
 - Composite liquidity score
 
 ---

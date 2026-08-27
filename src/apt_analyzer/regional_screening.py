@@ -450,6 +450,17 @@ class CandidateScreenResult:
     disclaimer: str = "Historical screening only; this is not an investment recommendation."
 
 
+@dataclass(frozen=True, slots=True)
+class CandidateMetricResult:
+    """Expose all supported candidate metrics before screening rules are applied."""
+
+    candidate_id: str
+    values: Mapping[str, Decimal]
+    unavailable: Mapping[str, str]
+    context: AnalysisContext
+    data_status: str
+
+
 SUPPORTED_UNITS = {
     "median_price_krw": "KRW",
     "median_area_sqm": "sqm",
@@ -481,10 +492,6 @@ def screen_candidates(
     """Apply all rules with one common analysis configuration."""
     if not rules:
         raise ValueError("at least one screening rule is required")
-    if config.price_series_method != "observed monthly median":
-        raise ValueError("unsupported price series method")
-    if config.area_grouping_policy != "integer-floor-exclusive-area":
-        raise ValueError("unsupported area grouping policy")
     for rule in rules:
         if rule.metric not in SUPPORTED_UNITS or rule.unit != SUPPORTED_UNITS[rule.metric]:
             raise ValueError(f"invalid unit for metric {rule.metric}")
@@ -492,6 +499,60 @@ def screen_candidates(
             raise ValueError(f"unsupported operator: {rule.operator}")
         if rule.method != SUPPORTED_METHODS[rule.metric]:
             raise ValueError(f"invalid method for metric {rule.metric}")
+    measurements = measure_candidates(
+        candidates,
+        transactions,
+        config,
+        coverage=coverage,
+        households=households,
+    )
+    results: list[CandidateScreenResult] = []
+    for measurement in measurements:
+        values: dict[str, Decimal] = {}
+        unavailable = {
+            key: reason
+            for key, reason in measurement.unavailable.items()
+            if key in {"coverage", "area_group"}
+        }
+        exclusions: list[str] = []
+        for rule in rules:
+            value = measurement.values.get(rule.metric)
+            if value is None:
+                unavailable[rule.metric] = measurement.unavailable.get(
+                    rule.metric, "metric unavailable"
+                )
+                exclusions.append(f"{rule.metric}: unavailable")
+            else:
+                values[rule.metric] = value
+                if not _matches(value, rule):
+                    exclusions.append(f"{rule.metric}: rule failed")
+        results.append(
+            CandidateScreenResult(
+                measurement.candidate_id,
+                not exclusions and not unavailable,
+                values,
+                unavailable,
+                tuple(exclusions),
+                measurement.context,
+                measurement.data_status,
+            )
+        )
+    return tuple(results)
+
+
+def measure_candidates(
+    candidates: Sequence[Apartment],
+    transactions: Mapping[str, Sequence[NormalizedTransaction]],
+    config: CommonAnalysisConfig,
+    *,
+    coverage: Mapping[str, Mapping[str, str]] | None = None,
+    households: Mapping[str, HouseholdEvidence] | None = None,
+) -> tuple[CandidateMetricResult, ...]:
+    """Compute every supported scalar metric under one common analysis context."""
+    if config.price_series_method != "observed monthly median":
+        raise ValueError("unsupported price series method")
+    if config.area_grouping_policy != "integer-floor-exclusive-area":
+        raise ValueError("unsupported area grouping policy")
     candidate_ids = {candidate.internal_id for candidate in candidates}
     if len(candidate_ids) != len(candidates):
         raise ValueError("screening candidates must have distinct internal IDs")
@@ -503,7 +564,7 @@ def screen_candidates(
         if any(record.apartment_id != apartment_id for record in records):
             raise ValueError("transaction apartment ID does not match mapping candidate")
     required_months = _months(config.overall_period)
-    results: list[CandidateScreenResult] = []
+    results: list[CandidateMetricResult] = []
     for apartment in candidates:
         records = tuple(
             record
@@ -512,10 +573,12 @@ def screen_candidates(
         )
         unavailable: dict[str, str] = {}
         values: dict[str, Decimal] = {}
-        exclusions: list[str] = []
-        candidate_coverage: Mapping[str, str] = (
+        stored_coverage: Mapping[str, str] = (
             coverage.get(apartment.internal_id, {}) if coverage is not None else {}
         )
+        candidate_coverage = {
+            month: state for month, state in stored_coverage.items() if month in required_months
+        }
         if coverage is not None and (
             set(candidate_coverage) != set(required_months)
             or any(
@@ -577,6 +640,8 @@ def screen_candidates(
             "mdd_ratio": result.mdd.value,
         }
         reasons = {
+            "median_price_krw": "no eligible transactions",
+            "median_area_sqm": "no eligible transactions",
             "turnover_ratio": (
                 result.turnover.unavailable.reason
                 if result.turnover and result.turnover.unavailable
@@ -591,22 +656,21 @@ def screen_candidates(
                 result.mdd.unavailable.reason if result.mdd.unavailable else "metric unavailable"
             ),
         }
-        for rule in rules:
-            value = metrics[rule.metric]
-            if value is None or "coverage" in unavailable or "area_group" in unavailable:
-                unavailable.setdefault(rule.metric, reasons.get(rule.metric, "metric unavailable"))
-                exclusions.append(f"{rule.metric}: unavailable")
+        invalid_context = "coverage" in unavailable or "area_group" in unavailable
+        context_reason = unavailable.get("coverage") or unavailable.get("area_group")
+        for metric, value in metrics.items():
+            if invalid_context:
+                assert context_reason is not None
+                unavailable[metric] = context_reason
+            elif value is None:
+                unavailable.setdefault(metric, reasons.get(metric, "metric unavailable"))
             else:
-                values[rule.metric] = value
-                if not _matches(value, rule):
-                    exclusions.append(f"{rule.metric}: rule failed")
+                values[metric] = value
         results.append(
-            CandidateScreenResult(
+            CandidateMetricResult(
                 apartment.internal_id,
-                not exclusions and not unavailable,
                 values,
                 unavailable,
-                tuple(exclusions),
                 context,
                 result.data_status,
             )
