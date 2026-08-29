@@ -30,6 +30,7 @@ describe("local web foundation", () => {
     expect(configuration.data.labels).toEqual(["2024-01", "2024-02"]);
     expect(configuration.data.datasets[0]?.data).toEqual([0, null]);
     expect(configuration.data.datasets[0]?.spanGaps).toBe(false);
+    expect(configuration.data.datasets[0]?.label).toContain("관측 가격");
   });
 
   it("marks MDD peak and trough on the same observed series", () => {
@@ -50,5 +51,9 @@ describe("local web foundation", () => {
     ]);
     expect(configuration.type).toBe("bar");
     expect(configuration.data.datasets[0]?.data).toEqual([0, null]);
+    expect(configuration.data.datasets[0]?.label).toBe("유효 거래량");
+    expect(configuration.options?.plugins?.title?.text).toBe(
+      "월별 유효 거래량",
+    );
   });
 });

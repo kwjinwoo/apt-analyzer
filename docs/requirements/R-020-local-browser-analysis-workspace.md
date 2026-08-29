@@ -9,7 +9,7 @@ origin: "Local-web product direction"
 supersedes: []
 superseded_by: null
 related_requirements: [R-001, R-002, R-013, R-014, R-016, R-017, R-019]
-related_decisions: [ADR-0005]
+related_decisions: [ADR-0005, ADR-0008]
 ---
 
 # R-020: Local browser analysis workspace

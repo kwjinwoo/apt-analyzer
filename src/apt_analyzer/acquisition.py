@@ -56,6 +56,7 @@ class SourceResult:
 
 
 Transport = Callable[[str, float], bytes]
+RequestObserver = Callable[[str], None]
 
 
 class DataGoKrClient:
@@ -68,6 +69,7 @@ class DataGoKrClient:
         transport: Transport | None = None,
         retries: int = 2,
         timeout: float = 10.0,
+        request_observer: RequestObserver | None = None,
     ) -> None:
         """Configure credentials, transport limits, and an in-memory cache."""
         if not service_key.strip():
@@ -76,6 +78,7 @@ class DataGoKrClient:
         self._transport = transport or self._urlopen
         self._retries = retries
         self._timeout = timeout
+        self._request_observer = request_observer
         self._cache: dict[str, SourceResult] = {}
 
     def build_url(self, endpoint: str, params: Mapping[str, str]) -> str:
@@ -106,6 +109,8 @@ class DataGoKrClient:
             )
         for attempt in range(self._retries + 1):
             try:
+                if self._request_observer is not None:
+                    self._request_observer(endpoint)
                 payload = self._transport(url, self._timeout)
                 result = self.parse_xml(payload, source=source, query=params)
                 self._cache[url] = result

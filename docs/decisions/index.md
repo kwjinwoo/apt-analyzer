@@ -22,3 +22,4 @@ Once accepted, an ADR preserves the decision made at that time. Correcting wordi
 | [ADR-0005](ADR-0005-local-web-delivery-stack.md) | Local-web delivery stack | accepted | 2026-08-24 |
 | [ADR-0006](ADR-0006-regional-cache-and-screening.md) | Regional cache and bounded screening | accepted | 2026-08-26 |
 | [ADR-0007](ADR-0007-regional-relative-analysis.md) | Independent regional relative analysis | accepted | 2026-08-27 |
+| [ADR-0008](ADR-0008-interactive-province-list-freshness.md) | Interactive province-list freshness and stale fallback | accepted | 2026-08-28 |

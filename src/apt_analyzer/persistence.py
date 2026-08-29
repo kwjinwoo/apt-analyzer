@@ -10,11 +10,13 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from apt_analyzer.apartment_data import ApartmentCandidate, months
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
+SEOUL = ZoneInfo("Asia/Seoul")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +62,33 @@ class SQLiteStore:
     def close(self) -> None:
         """Close the underlying SQLite connection."""
         self._connection.close()
+
+    def increment_api_usage(self, service_id: str, *, recorded_date: str | None = None) -> None:
+        """Atomically record one outbound public-API attempt for a Seoul calendar date."""
+        if not service_id.strip():
+            raise ValueError("service_id must not be empty")
+        usage_date = recorded_date or datetime.now(SEOUL).date().isoformat()
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO api_usage(usage_date, service_id, request_count) VALUES (?, ?, 1) "
+                "ON CONFLICT(usage_date, service_id) DO UPDATE SET request_count=request_count + 1",
+                (usage_date, service_id),
+            )
+
+    def api_usage_snapshot(
+        self, usage_date: str | None = None, service_ids: tuple[str, ...] = ()
+    ) -> dict[str, int]:
+        """Return zero-inclusive request counts for the requested Seoul calendar date."""
+        target_date = usage_date or datetime.now(SEOUL).date().isoformat()
+        if not service_ids:
+            return {}
+        placeholders = ",".join("?" for _ in service_ids)
+        rows = self._connection.execute(
+            f"SELECT service_id, request_count FROM api_usage WHERE usage_date=? AND service_id IN ({placeholders})",
+            (target_date, *service_ids),
+        ).fetchall()
+        values = {str(row["service_id"]): int(row["request_count"]) for row in rows}
+        return {service_id: values.get(service_id, 0) for service_id in service_ids}
 
     def save_apartment(self, apartment: Apartment) -> None:
         """Insert or refresh an apartment identity."""
@@ -430,20 +459,22 @@ class SQLiteStore:
                 CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, apartment_id TEXT NOT NULL, contract_date TEXT NOT NULL, price_krw INTEGER NOT NULL, exclusive_area_sqm TEXT NOT NULL, transaction_type TEXT NOT NULL, is_cancelled INTEGER NOT NULL, floor INTEGER, building TEXT, unit TEXT, construction_year INTEGER, broker_location TEXT, source_name TEXT, source_record_id TEXT, source_values TEXT NOT NULL, source_key TEXT NOT NULL);
                 CREATE UNIQUE INDEX uq_transactions_source ON transactions(apartment_id, COALESCE(source_name, ''), source_key);
                 CREATE TABLE monthly_coverage (apartment_id TEXT NOT NULL, source_name TEXT NOT NULL, month TEXT NOT NULL, fetched_at TEXT NOT NULL, PRIMARY KEY(apartment_id, source_name, month));
-                INSERT INTO schema_version VALUES (3);
+                INSERT INTO schema_version VALUES (4);
                 """
             )
             self._migrate_v3()
+            self._migrate_v4()
             self._connection.commit()
             return
         version = int(row[0])
-        if version not in (1, 2, CURRENT_SCHEMA_VERSION):
+        if version not in (1, 2, 3, CURRENT_SCHEMA_VERSION):
             raise ValueError(f"unsupported schema version: {version}")
         if version == 1:
             self._migrate_v1()
             version = 2
-        if version in (2, CURRENT_SCHEMA_VERSION):
+        if version in (2, 3, CURRENT_SCHEMA_VERSION):
             self._migrate_v3()
+            self._migrate_v4()
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS apartments (internal_id TEXT PRIMARY KEY, display_name TEXT NOT NULL)"
         )
@@ -484,7 +515,20 @@ class SQLiteStore:
             UPDATE schema_version SET version=3;
             """
         )
-        self._connection.commit()
+
+    def _migrate_v4(self) -> None:
+        """Add persisted daily outbound-request accounting without changing evidence."""
+        self._connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS api_usage (
+                usage_date TEXT NOT NULL,
+                service_id TEXT NOT NULL,
+                request_count INTEGER NOT NULL CHECK(request_count >= 0),
+                PRIMARY KEY(usage_date, service_id)
+            );
+            UPDATE schema_version SET version=4;
+            """
+        )
 
     def _migrate_v1(self) -> None:
         """Migrate legacy data atomically with deterministic duplicate collapse."""

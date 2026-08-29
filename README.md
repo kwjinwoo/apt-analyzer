@@ -18,6 +18,26 @@ DATA_GO_KR_SERVICE_KEY=your_percent_encoded_key
 
 The environment variable takes precedence. The key is already percent-encoded and the client preserves it exactly once. Never commit `.env` or print credential-bearing request URLs.
 
+The local web screen shows daily public-API request attempts recorded in the
+configured SQLite database (`APT_ANALYZER_DB`). Positive development limits can
+be overridden with these environment variables; invalid values fail at startup:
+
+```dotenv
+APT_ANALYZER_KAPT_LIST_DAILY_LIMIT=5000
+APT_ANALYZER_KAPT_DETAIL_DAILY_LIMIT=5000
+APT_ANALYZER_MOLIT_TRADE_DAILY_LIMIT=10000
+```
+
+Counters use the Asia/Seoul calendar date and are limited to this app and SQLite
+file. They do not represent portal-global usage or calls from other processes or
+databases. Cache hits are not counted; retries count once per attempt.
+
+Interactive K-APT province lists are also persisted in the same SQLite file. A
+successful list snapshot is reused for 24 hours; after expiry the next search
+synchronously refreshes the complete province list. If that refresh fails, the
+previous snapshot remains available with a stale notice. K-APT detail responses
+and transaction responses are not cached by this policy.
+
 ## Offline M2 analyzer
 
 The first MVP analyzes a deterministic JSON fixture without a network call:

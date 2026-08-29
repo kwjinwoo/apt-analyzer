@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -8,118 +8,621 @@
     </head>
     <body>
         <main id="workspace">
-            <h1>{{ title }}</h1>
-            {% if result.subjects %}<p>Common analysis context</p>{% endif %}
-            {% if result.subjects %}<p><a href="/export?kind=comparison">Download equivalent JSON export</a></p>{% endif %}
-            {% if result and result.raw_count is defined %}<details><summary>Machine-readable result</summary><pre>{{ result|tojson(indent=2) }}</pre></details>{% endif %}
-            {% if result and result.get("update") is not none %}<section aria-labelledby="update-heading"><h2 id="update-heading">Evidence update</h2><p>SQLite update completed with per-month evidence states.</p><table><caption>Monthly update status</caption><tr><th>Month</th><th>Status</th></tr>{% for item in result.get("update").updates %}<tr><td>{{ item.month }}</td><td>{{ item.status }}</td></tr>{% endfor %}</table></section>{% set result = none %}{% endif %}
-            {% if result.subjects %}<section aria-labelledby="comparison-heading"><h2 id="comparison-heading">Comparison subjects</h2><table><caption>Subject metrics and evidence limitations</caption><tr><th>Identity</th><th>Available</th><th>Status</th><th>Reason</th><th>Raw</th><th>Eligible</th><th>MDD</th></tr>{% for subject in result.subjects %}<tr><td>{{ subject.apartment.display_name }} ({{ subject.apartment.internal_id }})</td><td>{{ subject.available }}</td><td>{{ subject.data_status|default("unavailable") }}</td><td>{{ subject.unavailable_reason if subject.unavailable_reason is not none else "-" }}</td><td>{{ subject.raw_count if subject.raw_count is not none else "Unavailable" }}</td><td>{{ subject.eligible_count if subject.eligible_count is not none else "Unavailable" }}</td><td>{{ subject.mdd.value if subject.mdd and subject.mdd.value is not none else "Unavailable" }}</td></tr>{% endfor %}</table></section>{% endif %}
-            {% if result.subjects %}<section aria-label="Comparison detail"><h3>Comparison detail and evidence</h3>{% for subject in result.subjects %}<article><h4>{{ subject.apartment.display_name }}</h4><p>Effective area: {{ subject.effective_area_key if subject.effective_area_key is not none else "All areas" }}; turnover: {{ subject.turnover.value if subject.turnover and subject.turnover.value is not none else "Unavailable" }}; retention: {{ subject.retention.value if subject.retention and subject.retention.value is not none else "Unavailable" }}; MDD: {{ subject.mdd.value if subject.mdd and subject.mdd.value is not none else "Unavailable" }}.</p><p>Peak: {{ subject.peak.month if subject.peak and subject.peak.month is not none else "Unavailable" }}; trough: {{ subject.trough.month if subject.trough and subject.trough.month is not none else "Unavailable" }}. Reason: {{ subject.unavailable_reason if subject.unavailable_reason is not none else "-" }}</p></article>{% endfor %}</section>{% endif %}
-            {% if result.subjects %}<section aria-label="Metric availability reasons">{% for subject in result.subjects %}<p>{{ subject.apartment.display_name }} — turnover: {{ subject.turnover.reason if subject.turnover and subject.turnover.value is none else "Available" }}; retention: {{ subject.retention.reason if subject.retention and subject.retention.value is none else "Available" }}; MDD: {{ subject.mdd.reason if subject.mdd and subject.mdd.value is none else "Available" }}</p>{% endfor %}</section>{% set result = none %}{% endif %}
-            <p class="state" data-state="{{ workspace.status }}">Workspace state: {{ workspace.status }}</p>
-            {% if result.error %}<p role="alert">Update/search failed: {{ result.error }}</p>{% endif %}
+            {% set labels = ui.labels %}
+            {% set metric_labels = ui.metric_labels %}
+            {% set operator_labels = ui.operator_labels %}
+            {% set method_labels = ui.method_labels %}
+            {% set unit_labels = ui.unit_labels %}
+            <header class="hero">
+                <p class="eyebrow">apt-analyzer · 로컬 분석 도구</p>
+                <h1>아파트 거래 흐름과 가격 변화를 살펴보세요</h1>
+                <p>아파트를 직접 선택하고 거래 근거를 갱신한 뒤, 같은 분석 조건으로 지표를 비교합니다. 결과는 화면과 JSON으로 함께 확인할 수 있습니다.</p>
+            </header>
+            <p class="state badge" data-state="{{ workspace.status }}">현재 상태: {{ labels.get(workspace.status,workspace.status) }}</p>
+            <section class="api-usage" aria-labelledby="api-usage-title">
+                <div class="section-heading">
+                    <div>
+                        <p class="step">오늘의 사용량</p>
+                        <h2 id="api-usage-title">공공 API 호출 현황</h2>
+                    </div>
+                    <strong>{{ api_usage_total }}회</strong>
+                </div>
+                <p class="help">이 수치는 설정된 SQLite 파일에 이 앱이 기록한 오늘(한국 시간) 호출 시도입니다. 포털 전체 사용량이나 다른 앱·데이터베이스의 호출은 확인할 수 없습니다.</p>
+                <div class="api-usage-grid">
+                    {% for item in api_usage %}
+                        <div class="api-usage-card">
+                            <strong>{{ item.label }}</strong>
+                            <span>{{ item.used }} / {{ item.limit }}회</span>
+                            <progress max="{{ item.limit }}"
+                                      value="{{ [item.used, item.limit]|min }}"
+                                      aria-label="{{ item.label }} 오늘 사용량">{{ item.used }} / {{ item.limit }}</progress>
+                            <small>남은 횟수 {{ item.remaining }}회</small>
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% if result and result.error %}
+                <p class="alert" role="alert">처리할 수 없습니다: {{ result.error }}</p>
+            {% endif %}
             <section>
-                <h2>1. Search and select</h2>
+                <p class="step">1단계</p>
+                <h2>아파트 검색 및 선택</h2>
+                <p class="help">검색 결과에서 분석할 단지를 직접 선택합니다.</p>
+                {% if workspace.search_cache_notice %}
+                    <p class="help cache-notice" role="status">{{ workspace.search_cache_notice }}</p>
+                {% endif %}
                 <form method="post"
                       action="/search"
                       hx-post="/search"
                       hx-target="#workspace"
-                      hx-swap="outerHTML">
+                      hx-swap="outerHTML"
+                      hx-indicator="#search-progress"
+                      hx-disabled-elt="find button">
                     <label>
-                        Apartment name
-                        <input name="name" required></label><label for="sido_code">Province</label>
-                    <select id="sido_code" name="sido_code" required>{% for code, label in province_options %}<option value="{{ code }}"
-        {{ " selected" if code == workspace.search_sido_code else "" }}>{{ label }}</option>{% endfor %}</select><button>Search</button>
+                        아파트 이름<input name="name" required>
+                    </label>
+                    <label>
+                        시·도<select name="sido_code" required>
+                        {% for code,label in province_options %}
+                            <option value="{{ code }}"
+                                    {{ " selected" if code==workspace.search_sido_code else "" }}>{{ label }}</option>
+                        {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit">검색하기</button>
+                    <div id="search-progress"
+                         class="request-progress htmx-indicator"
+                         role="status"
+                         aria-live="polite">
+                        <progress aria-label="아파트 검색 진행 중"></progress><span>검색 중입니다. 잠시만 기다려 주세요.</span>
+                    </div>
                 </form>
-                {% if candidates %}<p>Choose one explicit candidate; no silent name matching.</p>
-                <table>
-                    <caption>Search candidates</caption>
-                    <tr>
-                        <th>Name</th>
-                        <th>Address</th>
-                        <th>Action</th>
-                    </tr>
-                    {% for candidate in candidates %}<tr><td>{{ candidate.name }}</td><td>{{ candidate.road_address }}<br>{{ candidate.lot_address }}</td><td>
-                        <form method="post"
-                              action="/select"
-                              hx-post="/select"
-                              hx-target="#workspace"
-                              hx-swap="outerHTML">
-                            <input type="hidden" name="source_id" value="{{ candidate.source_id }}"><input type="hidden" name="name" value="{{ candidate.name }}"><input type="hidden"
-       name="legal_dong_code"
-       value="{{ candidate.legal_dong_code }}"><input type="hidden" name="lot_address" value="{{ candidate.lot_address }}"><input type="hidden"
-       name="road_address"
-       value="{{ candidate.road_address }}"><button>Select</button>
-                        </form>
-                        </td>
-                        </tr>
-                    {% endfor %}
-                </table>
-            {% endif %}
-        </section>
-        {% if workspace.apartment %}<section><h2>2. Refresh evidence</h2>
-        <p>Selected: {{ workspace.apartment.display_name }} ({{ workspace.apartment.internal_id }})</p>
-        <form method="post"
-              action="/update"
-              hx-post="/update"
-              hx-target="#workspace"
-              hx-swap="outerHTML">
-            <label>
-                Start
-                <input name="start" type="date" required></label><label>End
-                    <input name="end" type="date" required></label><label>Refresh before
-                        <input name="refresh_before" type="datetime-local"></label><button>Update SQLite</button>
-                </form>
-                </section>
+                {% if candidates %}
+                    <div class="table-wrap candidate-results">
+                        <table>
+                            <caption>검색 결과</caption>
+                            <tr>
+                                <th>단지명</th>
+                                <th>주소</th>
+                                <th>선택</th>
+                            </tr>
+                            {% for candidate in candidates %}
+                                <tr>
+                                    <td>{{ candidate.name }}</td>
+                                    <td class="candidate-address">
+                                        {% if candidate.road_address %}
+                                            <div>{{ candidate.road_address }}</div>
+                                        {% endif %}
+                                        {% if candidate.lot_address %}
+                                            <div>{{ candidate.lot_address }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <form method="post"
+                                              action="/select"
+                                              hx-post="/select"
+                                              hx-target="#workspace"
+                                              hx-swap="outerHTML">
+                                            <button type="submit"
+                                                    name="source_id"
+                                                    value="{{ candidate.source_id }}"
+                                                    class="secondary">이 단지 선택</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                {% endif %}
+            </section>
+            {% if workspace.apartment %}
                 <section>
-                    <h2>3. Analyze</h2>
+                    <p class="step">2단계</p>
+                    <h2>근거 데이터 갱신</h2>
+                    <p class="selected">선택한 단지: <strong>{{ workspace.apartment.display_name }}</strong> ({{ workspace.apartment.internal_id }})</p>
+                    <form method="post"
+                          action="/update"
+                          hx-post="/update"
+                          hx-target="#workspace"
+                          hx-swap="outerHTML"
+                          hx-indicator="#update-progress"
+                          hx-disabled-elt="find button">
+                        <label>
+                            시작일<input name="start" type="date" required>
+                        </label>
+                        <label>
+                            종료일<input name="end" type="date" required>
+                        </label>
+                        <label>
+                            이 시각 이전 데이터만 다시 받기<input name="refresh_before" type="datetime-local">
+                        </label>
+                        <button type="submit">SQLite 근거 갱신</button>
+                        <div id="update-progress"
+                             class="request-progress htmx-indicator"
+                             role="status"
+                             aria-live="polite">
+                            <progress aria-label="SQLite 근거 갱신 진행 중"></progress><span>SQLite 근거를 갱신 중입니다. 잠시만 기다려 주세요.</span>
+                        </div>
+                    </form>
+                </section>
+                {% if result and result.get("update") %}
+                    <section class="result-panel">
+                        <h2>근거 데이터 갱신 결과</h2>
+                        <p>요청한 기간의 월별 데이터 수집 상태를 확인하세요.</p>
+                        <div class="table-wrap">
+                            <table>
+                                <caption>월별 갱신 상태</caption>
+                                <tr>
+                                    <th>월</th>
+                                    <th>상태</th>
+                                    <th>추가 거래</th>
+                                    <th>중복 거래</th>
+                                </tr>
+                                {% for item in result["update"]["updates"] %}
+                                    <tr>
+                                        <td>{{ item.month }}</td>
+                                        <td>{{ labels.get("valid_empty" if item.status == "fetched" and item.inserted + item.duplicates == 0 else ("fetched" if item.status == "fetched" else ("skipped" if item.status == "skipped" else item.status)), item.status) }}</td>
+                                        <td>{{ item.inserted }}</td>
+                                        <td>{{ item.duplicates }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </section>
+                {% endif %}
+                <section>
+                    <p class="step">3단계</p>
+                    <h2>분석 조건 설정</h2>
                     <form method="post"
                           action="/analysis"
                           hx-post="/analysis"
                           hx-target="#workspace"
                           hx-swap="outerHTML">
-                        <label>
-                            Overall start
-                            <input name="start" type="date" required></label><label>Overall end
-                                <input name="end" type="date" required>
+                        <fieldset>
+                            <legend>기준 기간</legend>
+                            <label>
+                                전체 시작일<input name="start" type="date" required>
                             </label>
-                            <fieldset>
-                                <legend>Metric periods</legend>
+                            <label>
+                                전체 종료일<input name="end" type="date" required>
+                            </label>
+                        </fieldset>
+                        <details>
+                            <summary>지표별 기간·세대수</summary>
+                            <div class="period-grid">
+                                {% for field,label in [("turnover_start","거래회전율 시작일"),("turnover_end","거래회전율 종료일"),("baseline_start","기준 기간 시작일"),("baseline_end","기준 기간 종료일"),("comparison_start","비교 기간 시작일"),("comparison_end","비교 기간 종료일"),("mdd_start","MDD 시작일"),("mdd_end","MDD 종료일")] %}
+                                    <label>
+                                        {{ label }}<input name="{{ field }}" type="date">
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            <div class="period-grid">
                                 <label>
-                                    Turnover
-                                    <input name="turnover_start" type="date"><input name="turnover_end" type="date"></label><label>Baseline
-                                        <input name="baseline_start" type="date"><input name="baseline_end" type="date"></label><label>Comparison
-                                            <input name="comparison_start" type="date"><input name="comparison_end" type="date"></label><label>MDD
-                                                <input name="mdd_start" type="date"><input name="mdd_end" type="date">
-                                            </label>
-                                        </fieldset>
-                                        <fieldset><legend>Population</legend><label>Area <select name="area_group"><option value="all">All areas</option>{% for group in (result.available_area_groups if result and result.available_area_groups else []) %}<option value="{{ group.key }}">{{ group.label }}</option>{% endfor %}</select></label><label>Households <input name="household_count" type="number"><input name="household_scope" value="complex"><input name="household_source" placeholder="source"></label></fieldset>
-                                        <fieldset><legend>Inclusion policy</legend><label><input type="checkbox" name="include_cancelled"> Include cancelled</label>{% for type in ["brokered","direct","unknown"] %}<label><input type="checkbox" name="transaction_types" value="{{ type }}" checked> {{ type }}</label>{% endfor %}</fieldset><button>Analyze</button>
-                                    </form>
-                                </section>
-                            {% endif %}
-                            {% if workspace.apartments|length > 1 %}<section><h2>4. Compare</h2><form method="post"
+                                    세대수<input name="household_count" type="number" min="0">
+                                </label>
+                                <label>
+                                    세대수 범위<input name="household_scope" value="complex">
+                                </label>
+                                <label>
+                                    세대수 출처<input name="household_source" placeholder="출처 설명">
+                                </label>
+                            </div>
+                        </details>
+                        <fieldset>
+                            <legend>면적·거래 포함 정책</legend>
+                            <label>
+                                면적 그룹<select name="area_group">
+                                <option value="all">전체 면적</option>
+                                {% for group in workspace.area_groups_by_apartment.get(workspace.apartment.internal_id,()) %}
+                                    <option value="{{ group.key }}">{{ group.label }}</option>
+                                {% endfor %}
+                                </select>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" name="include_cancelled">
+                                취소 거래 포함
+                            </label>
+                            {% for type in ["brokered","direct","unknown"] %}
+                                <label class="check">
+                                    <input type="checkbox" name="transaction_types" value="{{ type }}" checked>{{ labels[type] }}
+                                </label>
+                            {% endfor %}
+                        </fieldset>
+                        <button>분석 실행</button>
+                    </form>
+                </section>
+            {% endif %}
+            {% if workspace.apartments|length>1 %}<section><p class="step">4단계</p><h2>같은 조건으로 비교</h2><form method="post"
       action="/comparison"
       hx-post="/comparison"
       hx-target="#workspace"
-      hx-swap="outerHTML"><label>Subjects <select name="apartment_ids" multiple required>{% for key, apartment in workspace.apartments.items() %}<option value="{{ key }}" selected>{{ apartment.display_name }}</option>{% endfor %}</select></label><label>Area <select name="area_group"><option value="all">All areas</option>{% for groups in workspace.area_groups_by_apartment.values() %}{% for group in groups %}<option value="{{ group.key }}">{{ group.label }}</option>{% endfor %}{% endfor %}</select></label><fieldset><legend>Inclusion policy</legend><label><input type="checkbox" name="include_cancelled"> Include cancelled</label>{% for type in ["brokered","direct","unknown"] %}<label><input type="checkbox" name="transaction_types" value="{{ type }}" checked>{{ type }}</label>{% endfor %}</fieldset>{% for field in ["start", "end", "turnover_start", "turnover_end", "baseline_start", "baseline_end", "comparison_start", "comparison_end", "mdd_start", "mdd_end"] %}<input name="{{ field }}" type="date">{% endfor %}<button>Compare shared context</button></form></section>{% endif %}
-                            {% if result and result.results is not defined %}<section><h2>{% if result.config %}Common analysis context{% else %}Analysis result{% endif %}</h2>{% if result.config %}<p>Shared period: {{ result.config.overall_period.start }} to {{ result.config.overall_period.end }}</p>{% endif %}<p>Raw: {{ result.raw_count|default("-") }} · Eligible: {{ result.eligible_count|default("-") }} · Data status: {{ result.data_status|default("coverage-limited") }}</p><canvas id="volume-chart"
-        aria-label="Monthly eligible transaction volume"
-        role="img"></canvas><canvas id="price-chart"
-        aria-label="Observed monthly median price chart"
-        role="img"></canvas><h3>Underlying volume</h3><table><caption>Calendar period, count, and availability</caption><tr><th>Period</th><th>Count</th><th>Status</th></tr>{% for point in result.volume_series|default([]) %}<tr><td>{{ point.period }}</td><td>{{ point.value if point.value is not none else "Unavailable" }}</td><td>{{ point.status|default("observed") }}</td></tr>{% endfor %}</table><h3>Underlying price</h3><table><caption>Observed monthly median and transaction evidence</caption><tr><th>Period</th><th>Median</th><th>Transaction count</th><th>Status</th></tr>{% for point in result.monthly_series|default([]) %}<tr><td>{{ point.period }}</td><td>{{ point.value if point.value is not none else "Unavailable" }}</td><td>{{ point.transaction_count if point.transaction_count is not none else "Unavailable" }}</td><td>{{ point.status }}</td></tr>{% endfor %}</table>{% if result.mdd %}<p>MDD method: {{ result.mdd.price_series_method }}; missing months: {{ result.mdd.missing_month_method }}.</p><p>Peak: {{ result.mdd.peak.month if result.mdd.peak.month is not none else "Unavailable" }} / {{ result.mdd.peak.median_krw if result.mdd.peak.median_krw is not none else "Unavailable" }}; Trough: {{ result.mdd.trough.month if result.mdd.trough.month is not none else "Unavailable" }} / {{ result.mdd.trough.median_krw if result.mdd.trough.median_krw is not none else "Unavailable" }}</p>{% endif %}<a href="/export{% if result.config %}?kind=comparison{% endif %}">Download equivalent JSON export</a><pre id="analysis-data">{{ result|tojson(indent=2) }}</pre></section>{% endif %}
-                            {% if result.ui_context %}<section aria-labelledby="context-heading"><h3 id="context-heading">Analysis context and metrics</h3><dl><dt>Apartment</dt><dd>{{ result.ui_context.apartment_name }} ({{ result.ui_context.apartment_id }})</dd><dt>Overall period</dt><dd>{{ result.ui_context.overall_period.start }} to {{ result.ui_context.overall_period.end }}</dd><dt>Area</dt><dd>{{ result.ui_context.area }}</dd><dt>Inclusion policy</dt><dd>{{ result.ui_context.inclusion_policy }}</dd><dt>Raw transactions</dt><dd>{{ result.raw_count }}</dd><dt>Eligible transactions</dt><dd>{{ result.eligible_count }}</dd>{% for name, metric_period in result.ui_context.metric_periods.items() %}<dt>{{ name|capitalize }} period</dt><dd>{{ metric_period.start }} to {{ metric_period.end }}</dd>{% endfor %}<dt>Turnover</dt><dd>{{ result.turnover.value if result.turnover and result.turnover.value is not none else "Unavailable" }}</dd><dt>Retention</dt><dd>{{ result.retention.value if result.retention and result.retention.value is not none else "Unavailable" }}</dd><dt>MDD</dt><dd>{{ result.mdd.value if result.mdd and result.mdd.value is not none else "Unavailable" }}</dd></dl>{% if result.mdd %}<p>Price method: {{ result.mdd.price_series_method }}; missing-month method: {{ result.mdd.missing_month_method }}.</p><p>MDD peak: {{ result.mdd.peak.month if result.mdd.peak.month is not none else "Unavailable" }} / {{ result.mdd.peak.median_krw if result.mdd.peak.median_krw is not none else "Unavailable" }} ({{ result.mdd.peak.transaction_count if result.mdd.peak.transaction_count is not none else "Unavailable" }} transactions)</p><p>MDD trough: {{ result.mdd.trough.month if result.mdd.trough.month is not none else "Unavailable" }} / {{ result.mdd.trough.median_krw if result.mdd.trough.median_krw is not none else "Unavailable" }} ({{ result.mdd.trough.transaction_count if result.mdd.trough.transaction_count is not none else "Unavailable" }} transactions)</p>{% endif %}</section>{% endif %}<script type="module" src="/static/assets/apt-analyzer-web.js"></script>
-                            <section aria-labelledby="screening-heading"><h2 id="screening-heading">5. Regional screening</h2><p>Choose explicit persisted regions and rules. Historical screening only; this is not an investment recommendation.</p><form method="post"
-      action="/screen"
-      hx-post="/screen"
-      hx-target="#workspace"
-      hx-swap="outerHTML"><label>Regions (comma-separated)<input name="regions" required placeholder="11,41"></label><label>Candidate IDs (comma-separated, optional)<input name="candidate_source_ids" placeholder="source-id-1,source-id-2"></label><label>Overall start<input name="screen_start" type="date" required></label><label>Overall end<input name="screen_end" type="date" required></label><fieldset><legend>Metric periods</legend>{% for field in ["turnover_start", "turnover_end", "baseline_start", "baseline_end", "comparison_start", "comparison_end", "mdd_start", "mdd_end"] %}<label>{{ field }}<input name="{{ field }}" type="date"></label>{% endfor %}</fieldset><fieldset><legend>Population and inclusion</legend><label>Area group<input name="area_group" value="all"></label><label><input type="checkbox" name="include_cancelled"> Include cancelled</label>{% for type in ["brokered", "direct", "unknown"] %}<label><input type="checkbox" name="transaction_types" value="{{ type }}" checked>{{ type }}</label>{% endfor %}</fieldset><label>Rules JSON<textarea name="rules" required>[{"metric":"transaction_count","operator":"gte","value":"1","unit":"count"}]</textarea></label><label>Households JSON (required for turnover)<textarea name="household_json">{}</textarea></label><button>Screen persisted candidates</button></form>{% if result and result.results is defined %}<h3>Screening results</h3><p>{{ result.disclaimer }}</p><p>Status: {{ result.status }}</p>{% if result.context %}<p>Area population: {{ result.context.area_group }}; inclusion policy: {{ result.context.inclusion_policy }}</p><p>Metric periods: {% for name, period in result.context.metric_periods.items() %}{{ name }}={{ period.start }} to {{ period.end }}; {% endfor %}</p>{% endif %}<p>Rules: {% for rule in result.rules %}{{ rule.metric }} {{ rule.operator }} {{ rule.value }} {{ rule.unit }} ({{ rule.method }}); {% endfor %}</p><p>Regional coverage: {% for region, state in result.region_coverage.items() %}{{ region }}={{ state.state|default(state.result_state|default("unknown")) }}; {% endfor %}</p><p>Household evidence: {% for apartment_id, evidence in result.households.items() %}{{ apartment_id }}={{ evidence.count }} ({{ evidence.scope }}, {{ evidence.source|default("source unavailable") }}); {% endfor %}</p><table><caption>Included candidates and rule-driving values</caption><tr><th>Candidate</th><th>Included</th><th>Values</th><th>Unavailable / exclusions</th><th>Context</th></tr>{% for item in result.results %}<tr><td>{{ item.candidate_name|default(item.candidate_id) }}</td><td>{{ item.included }}</td><td>{% for key, value in item["values"].items() %}{{ key }}={{ value }}<br>{% endfor %}</td><td>{% for key, value in item["unavailable"].items() %}{{ key }}: {{ value }}<br>{% endfor %}{{ item["exclusions"]|join(", ") }}</td><td>{{ item.context.overall_period.start }} to {{ item.context.overall_period.end }}</td></tr>{% endfor %}</table><a href="/export?kind=screening">Download equivalent screening JSON export</a>{% endif %}</section>
-                        </main>
-                        <script>
-                      document.querySelectorAll('form[action="/comparison"] input[type="date"]').forEach((input) => {
-                        const labels = {start: "Overall start", end: "Overall end", turnover_start: "Turnover start", turnover_end: "Turnover end", baseline_start: "Baseline start", baseline_end: "Baseline end", comparison_start: "Comparison start", comparison_end: "Comparison end", mdd_start: "MDD start", mdd_end: "MDD end"};
-                        input.setAttribute("aria-label", labels[input.name] || input.name);
-                      });
-                        </script>
-                    </body>
-                </html>
+      hx-swap="outerHTML">
+                <label>
+                    비교할 아파트<select name="apartment_ids" multiple required>
+                    {% for key,apartment in workspace.apartments.items() %}
+                        <option value="{{ key }}" selected>{{ apartment.display_name }}</option>
+                    {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    면적 그룹<select name="area_group">
+                    <option value="all">전체 면적</option>
+                    {% for group in comparison_area_groups %}
+                        <option value="{{ group.key }}">{{ group.label }}</option>
+                    {% endfor %}
+                    </select>
+                </label>
+                <fieldset>
+                    <legend>기준 기간</legend>
+                    <label>
+                        시작일<input name="start" type="date" required>
+                    </label>
+                    <label>
+                        종료일<input name="end" type="date" required>
+                    </label>
+                </fieldset>
+                <details>
+                    <summary>지표별 기간</summary>
+                    <div class="period-grid">
+                        {% for field,label in [("turnover_start","거래회전율 시작일"),("turnover_end","거래회전율 종료일"),("baseline_start","기준 기간 시작일"),("baseline_end","기준 기간 종료일"),("comparison_start","비교 기간 시작일"),("comparison_end","비교 기간 종료일"),("mdd_start","MDD 시작일"),("mdd_end","MDD 종료일")] %}
+                            <label>
+                                {{ label }}<input name="{{ field }}" type="date">
+                            </label>
+                        {% endfor %}
+                    </div>
+                </details>
+                <fieldset>
+                    <legend>거래 포함 정책</legend>
+                    <label class="check">
+                        <input type="checkbox" name="include_cancelled">
+                        취소 거래 포함
+                    </label>
+                    {% for type in ["brokered","direct","unknown"] %}
+                        <label class="check">
+                            <input type="checkbox" name="transaction_types" value="{{ type }}" checked>{{ labels[type] }}
+                        </label>
+                    {% endfor %}
+                </fieldset>
+                <button>비교 실행</button>
+                </form>
+                </section>
+            {% endif %}
+            {% if result and result.results is not defined and not result.get("update") and result.subjects is not defined %}
+                <section>
+                    <h2>
+                        {% if result.config %}
+                            공통 분석 조건
+                        {% else %}
+                            분석 결과
+                        {% endif %}
+                    </h2>
+                    {% if result.config %}
+                        <p>전체 기간: {{ result.config.overall_period.start }} ~ {{ result.config.overall_period.end }} · 면적: {{ result.config.area_group_key or "전체 면적" }}</p>
+                        <p>거래 포함 정책: 취소 거래 {{ "포함" if result.config.inclusion_policy.include_cancelled else "제외" }}</p>
+                        <dl>
+                            <dt>거래회전율 기간</dt>
+                            <dd>
+                                {{ result.config.turnover_period.start }} ~ {{ result.config.turnover_period.end }}
+                            </dd>
+                            <dt>기준 기간</dt>
+                            <dd>
+                                {{ result.config.baseline_period.start }} ~ {{ result.config.baseline_period.end }}
+                            </dd>
+                            <dt>비교 기간</dt>
+                            <dd>
+                                {{ result.config.comparison_period.start }} ~ {{ result.config.comparison_period.end }}
+                            </dd>
+                            <dt>MDD 기간</dt>
+                            <dd>
+                                {{ result.config.mdd_period.start }} ~ {{ result.config.mdd_period.end }}
+                            </dd>
+                        </dl>
+                    {% endif %}
+                    <p>전체 거래: {{ result.raw_count|default("-") }} · 유효 거래: {{ result.eligible_count|default("-") }} · 데이터 상태: {{ labels.get(result.data_status|default("coverage-limited"),result.data_status|default("coverage-limited")) }}</p>
+                    {% if result.ui_context %}
+                        <div class="context-panel">
+                            <h3>분석 조건과 지표</h3>
+                            <p>아파트: {{ result.ui_context.apartment_name }} ({{ result.ui_context.apartment_id }}) · 면적: {{ "전체 면적" if result.ui_context.area == "all" else result.ui_context.area }}</p>
+                            <p>
+                                거래 포함 정책: 취소 거래 {{ "포함" if result.ui_context.inclusion_policy.include_cancelled else "제외" }} · 유형:
+                                {% for type in result.ui_context.inclusion_policy.transaction_types %}
+                                    {{ labels.get(type,type) }}
+                                    {% if not loop.last %}
+                                        ,
+                                    {% endif %}
+                                {% endfor %}
+                                · 지표: 거래회전율 {{ result.turnover.value if result.turnover and result.turnover.value is not none else "사용 불가" }}, 거래유지율 {{ result.retention.value if result.retention and result.retention.value is not none else "사용 불가" }}, 최대낙폭(MDD) {{ result.mdd.value if result.mdd and result.mdd.value is not none else "사용 불가" }}
+                            </p>
+                            {% for name,period in result.ui_context.metric_periods.items() %}
+                                <p>{{ {"turnover":"거래회전율 기간","baseline":"기준 기간","comparison":"비교 기간","mdd":"MDD 기간"}.get(name,name) }}: {{ period.start }} ~ {{ period.end }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <canvas id="volume-chart" aria-label="월별 유효 거래량 차트" role="img">
+                    </canvas>
+                    <canvas id="price-chart" aria-label="월별 관측 중간값 가격 차트" role="img">
+                    </canvas>
+                    <details>
+                        <summary>기계 판독용 원본 결과</summary>
+                        <pre id="analysis-data">{{ result|tojson(indent=2) }}</pre>
+                    </details>
+                </section>
+            {% endif %}
+            <section>
+                <p class="step">별도 도구</p>
+                <h2>지역 아파트 선별</h2>
+                <p class="help">저장된 지역·후보·공통 조건으로 과거 데이터를 선별합니다. 투자 추천이 아닙니다.</p>
+                <form method="post"
+                      action="/screen"
+                      hx-post="/screen"
+                      hx-target="#workspace"
+                      hx-swap="outerHTML">
+                    <label>
+                        지역 코드(쉼표로 구분)<input name="regions" required placeholder="예: 11,41">
+                    </label>
+                    <label>
+                        후보 ID(선택)<input name="candidate_source_ids" placeholder="source-id-1,source-id-2">
+                    </label>
+                    <fieldset>
+                        <legend>선별 기준 기간</legend>
+                        <label>
+                            시작일<input name="screen_start" type="date" required>
+                        </label>
+                        <label>
+                            종료일<input name="screen_end" type="date" required>
+                        </label>
+                    </fieldset>
+                    <fieldset>
+                        <legend>선별 규칙(구조화 입력)</legend>
+                        <label>
+                            지표<select name="rule_metric">
+                            <option value="median_price_krw">중간 거래가격</option>
+                            <option value="median_area_sqm">중간 전용면적</option>
+                            <option value="transaction_count">거래량</option>
+                            <option value="turnover_ratio">거래회전율</option>
+                            <option value="retention_ratio">거래유지율</option>
+                            <option value="mdd_ratio">최대낙폭(MDD)</option>
+                            </select>
+                        </label>
+                        <label>
+                            조건<select name="rule_operator">
+                            <option value="gte">이상</option>
+                            <option value="lte">이하</option>
+                            <option value="gt">초과</option>
+                            <option value="lt">미만</option>
+                            <option value="eq">같음</option>
+                            <option value="ne">다름</option>
+                            </select>
+                        </label>
+                        <label>
+                            값<input name="rule_value" value="1" required>
+                        </label>
+                        <label>
+                            단위<input name="rule_unit" placeholder="자동 입력">
+                        </label>
+                        <label>
+                            계산 방식(선택)<input name="rule_method" placeholder="기본 방식 자동 적용">
+                        </label>
+                        <label>
+                            고급 JSON 규칙(선택)<textarea name="rules" placeholder="여러 규칙이 필요할 때만 입력">
+</textarea>
+                        </label>
+                    </fieldset>
+                    <details>
+                        <summary>고급 설정: 면적·거래 정책·지표별 기간</summary>
+                        <label>
+                            면적 그룹<input name="area_group" value="all">
+                        </label>
+                        <div class="period-grid">
+                            {% for field,label in [("turnover_start","거래회전율 시작일"),("turnover_end","거래회전율 종료일"),("baseline_start","기준 기간 시작일"),("baseline_end","기준 기간 종료일"),("comparison_start","비교 기간 시작일"),("comparison_end","비교 기간 종료일"),("mdd_start","MDD 시작일"),("mdd_end","MDD 종료일")] %}
+                                <label>
+                                    {{ label }}<input name="{{ field }}" type="date">
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <label class="check">
+                            <input type="checkbox" name="include_cancelled">
+                            취소 거래 포함
+                        </label>
+                        {% for type in ["brokered","direct","unknown"] %}
+                            <label class="check">
+                                <input type="checkbox" name="transaction_types" value="{{ type }}" checked>{{ labels[type] }}
+                            </label>
+                        {% endfor %}
+                    </details>
+                    <label>
+                        아파트별 세대수 JSON(거래회전율에 필요)<textarea name="household_json">{}</textarea>
+                    </label>
+                    <p class="help">세대수 JSON은 고급 입력입니다.</p>
+                    <button>저장된 후보 선별</button>
+                </form>
+                {% if result and result.results is defined %}
+                    <div class="result-panel">
+                        <h3>선별 결과</h3>
+                        <p>{{ result.disclaimer }}</p>
+                        <p>상태: {{ labels.get(result.status,result.status) }}</p>
+                        {% if result.context %}
+                            <div class="context-panel">
+                                <h4>적용한 공통 분석 조건</h4>
+                                <p>
+                                    면적 그룹: {{ result.context.area_group }} · 취소 거래 {{ "포함" if result.context.inclusion_policy.include_cancelled else "제외" }} · 유형:
+                                    {% for type in result.context.inclusion_policy.included_transaction_types %}
+                                        {{ labels.get(type,type) }}
+                                        {% if not loop.last %}
+                                            ,
+                                        {% endif %}
+                                    {% endfor %}
+                                </p>
+                                {% for name,period in result.context.metric_periods.items() %}
+                                    <p>{{ {"turnover":"거래회전율 기간","baseline":"기준 기간","comparison":"비교 기간","mdd":"MDD 기간"}.get(name,name) }}: {{ period.start }} ~ {{ period.end }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <p>
+                            적용 규칙:
+                            {% for rule in result.rules %}
+                                {{ metric_labels.get(rule.metric,rule.metric) }} {{ operator_labels.get(rule.operator,rule.operator) }} {{ rule.value }} {{ unit_labels.get(rule.unit,rule.unit) }} ({{ method_labels.get(rule.method,rule.method) }})
+                            {% endfor %}
+                        </p>
+                        <p>
+                            지역 데이터 범위:
+                            {% for region,state in result.region_coverage.items() %}
+                                {{ region }}={{ labels.get(state.state|default(state.result_state|default("unknown")),state.state|default(state.result_state|default("unknown"))) }};
+                            {% endfor %}
+                        </p>
+                        <p>
+                            세대수 근거:
+                            {% for apartment_id,evidence in result.households.items() %}
+                                {{ apartment_id }}={{ evidence.count }} ({{ evidence.scope }}, {{ evidence.source or "출처 없음" }})
+                            {% endfor %}
+                        </p>
+                        <div class="table-wrap">
+                            <table>
+                                <caption>후보별 포함 여부와 규칙 판정값</caption>
+                                <tr>
+                                    <th>후보</th>
+                                    <th>포함</th>
+                                    <th>판정값</th>
+                                    <th>사용 불가·제외 사유</th>
+                                    <th>기준 기간</th>
+                                </tr>
+                                {% for item in result.results %}
+                                    <tr>
+                                        <td>{{ item.candidate_name|default(item.candidate_id) }}</td>
+                                        <td>{{ "포함" if item.included else "제외" }}</td>
+                                        <td>
+                                            {% for key,value in item["values"].items() %}
+                                                {{ metric_labels.get(key,key) }}={{ value }}
+                                                <br>
+                                            {% endfor %}
+                                        </td>
+                                        <td>
+                                            {% for key,value in item["unavailable"].items() %}
+                                                {{ metric_labels.get(key,key) }}: {{ labels.get(value,value) }}
+                                                <br>
+                                            {% endfor %}
+                                            {% for exclusion in item["exclusions"] %}
+                                                {{ labels.get(exclusion,exclusion) }}
+                                                <br>
+                                            {% endfor %}
+                                        </td>
+                                        <td>{{ item.context.overall_period.start }} ~ {{ item.context.overall_period.end }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                        <a class="button secondary" href="/export?kind=screening">선별 결과 JSON 내려받기</a>
+                    </div>
+                {% endif %}
+            </section>
+            {% if result and result.volume_series %}
+                <section>
+                    <h3>월별 거래량과 가격 근거</h3>
+                    <div class="table-wrap">
+                        <table>
+                            <caption>월별 거래량</caption>
+                            <tr>
+                                <th>기간</th>
+                                <th>거래량</th>
+                                <th>상태</th>
+                            </tr>
+                            {% for point in result.volume_series %}
+                                <tr>
+                                    <td>{{ point.period }}</td>
+                                    <td>{{ point.value if point.value is not none else "사용 불가" }}</td>
+                                    <td>{{ labels.get(point.status,point.status) }}</td>
+                                </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                    {% if result.monthly_series %}
+                        <div class="table-wrap">
+                            <table>
+                                <caption>월별 가격 중간값</caption>
+                                <tr>
+                                    <th>기간</th>
+                                    <th>중간 거래가격</th>
+                                    <th>거래 건수</th>
+                                    <th>상태</th>
+                                </tr>
+                                {% for point in result.monthly_series %}
+                                    <tr>
+                                        <td>{{ point.period }}</td>
+                                        <td>{{ point.value if point.value is not none else "사용 불가" }}</td>
+                                        <td>{{ point.transaction_count }}</td>
+                                        <td>{{ labels.get(point.status,point.status) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    {% endif %}
+                </section>
+            {% endif %}
+            {% if result and result.subjects %}
+                <section>
+                    <h2>아파트 비교 결과</h2>
+                    {% if result.config %}
+                        <div class="context-panel">
+                            <h3>적용한 공통 분석 조건</h3>
+                            <p>전체 기간: {{ result.config.overall_period.start }} ~ {{ result.config.overall_period.end }} · 면적 그룹: {{ result.config.area_group_key or "전체 면적" }}</p>
+                            <p>
+                                거래 포함 정책: 취소 거래 {{ "포함" if result.config.inclusion_policy.include_cancelled else "제외" }} · 유형:
+                                {% for type in result.config.inclusion_policy.included_transaction_types %}
+                                    {{ labels.get(type,type) }}
+                                    {% if not loop.last %}
+                                        ,
+                                    {% endif %}
+                                {% endfor %}
+                            </p>
+                            <dl>
+                                <dt>거래회전율 기간</dt>
+                                <dd>
+                                    {{ result.config.turnover_period.start }} ~ {{ result.config.turnover_period.end }}
+                                </dd>
+                                <dt>기준 기간</dt>
+                                <dd>
+                                    {{ result.config.baseline_period.start }} ~ {{ result.config.baseline_period.end }}
+                                </dd>
+                                <dt>비교 기간</dt>
+                                <dd>
+                                    {{ result.config.comparison_period.start }} ~ {{ result.config.comparison_period.end }}
+                                </dd>
+                                <dt>MDD 기간</dt>
+                                <dd>
+                                    {{ result.config.mdd_period.start }} ~ {{ result.config.mdd_period.end }}
+                                </dd>
+                            </dl>
+                        </div>
+                    {% endif %}
+                    <a class="button secondary" href="/export?kind=comparison">비교 결과 JSON 내려받기</a>
+                    <div class="table-wrap">
+                        <table>
+                            <caption>지표와 데이터 한계</caption>
+                            <tr>
+                                <th>아파트</th>
+                                <th>분석 가능</th>
+                                <th>상태</th>
+                                <th>사유</th>
+                                <th>전체 거래</th>
+                                <th>유효 거래</th>
+                                <th>MDD</th>
+                            </tr>
+                            {% for subject in result.subjects %}
+                                <tr>
+                                    <td>{{ subject.apartment.display_name }}</td>
+                                    <td>{{ "가능" if subject.available else "불가" }}</td>
+                                    <td>{{ labels.get(subject.data_status|default("unavailable"),subject.data_status|default("unavailable")) }}</td>
+                                    <td>{{ labels.get(subject.unavailable_reason,subject.unavailable_reason) if subject.unavailable_reason else "-" }}</td>
+                                    <td>{{ subject.raw_count if subject.raw_count is not none else "사용 불가" }}</td>
+                                    <td>{{ subject.eligible_count if subject.eligible_count is not none else "사용 불가" }}</td>
+                                    <td>{{ subject.mdd.value if subject.mdd and subject.mdd.value is not none else "사용 불가" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                </section>
+            {% endif %}
+            <script type="module" src="/static/assets/apt-analyzer-web.js"></script>
+        </main>
+    </body>
+</html>

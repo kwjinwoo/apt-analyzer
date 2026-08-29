@@ -97,6 +97,20 @@ def test_sqlite_candidate_cache_preserves_persisted_snapshot_on_failure(tmp_path
     assert cache.read("K-APT", "11").state is CandidateRefreshState.EXTERNAL_FAILURE
 
 
+def test_sqlite_candidate_cache_expires_at_exactly_24_hours(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "boundary.db")
+    cache = SQLiteCandidateCache(store, clock=lambda: datetime(2024, 4, 2, tzinfo=UTC))
+    candidate = RegionalCandidate("src-1", "Alpha", "11", "lot", "road")
+    store.save_candidate_snapshot(
+        "K-APT", "11", (candidate,), fetched_at="2024-04-01T00:00:00+00:00"
+    )
+
+    assert (
+        cache.read("K-APT", "11", cutoff=datetime(2024, 4, 2, tzinfo=UTC)).state
+        is CandidateRefreshState.STALE
+    )
+
+
 def test_sqlite_candidate_cache_persists_valid_empty_distinct_from_miss(tmp_path) -> None:
     path = tmp_path / "empty.db"
     store = SQLiteStore(path)
@@ -200,7 +214,7 @@ def test_v2_migration_preserves_coverage_and_adds_period_index(tmp_path) -> None
 
     store = SQLiteStore(path)
 
-    assert store.schema_version == 3
+    assert store.schema_version == 4
     assert store.coverage_states("apt-1", "fixture") == {"202401": "valid_empty"}
     assert "ix_transactions_apartment_contract" in store.transaction_query_plan(
         "apt-1", AnalysisPeriod(date(2024, 1, 1), date(2024, 1, 31))

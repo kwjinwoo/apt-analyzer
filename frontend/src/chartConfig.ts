@@ -12,7 +12,7 @@ export function priceChartConfiguration(
       labels: series.labels,
       datasets: [
         {
-          label: "Observed price",
+          label: "관측 가격 (월별 중간값)",
           data: series.data,
           spanGaps: false,
           pointBackgroundColor: points.map((point) =>
@@ -36,10 +36,10 @@ export function volumeChartConfiguration(
     type: "bar",
     data: {
       labels: series.labels,
-      datasets: [{ label: "Eligible transactions", data: series.data }],
+      datasets: [{ label: "유효 거래량", data: series.data }],
     },
     options: {
-      plugins: { title: { display: true, text: "Monthly transaction volume" } },
+      plugins: { title: { display: true, text: "월별 유효 거래량" } },
     },
   };
 }

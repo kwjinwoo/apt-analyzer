@@ -3,7 +3,7 @@ title: Regional ingestion and screening
 type: project
 role: topic
 status: active
-updated: 2026-08-27
+updated: 2026-08-28
 aliases: []
 tags:
   - regional-ingestion
@@ -43,11 +43,20 @@ context, and the historical non-recommendation disclaimer.
 
 - [ADR-0006](../../docs/decisions/ADR-0006-regional-cache-and-screening.md) records
   bounded scope and indefinite local retention.
+- [ADR-0008](../../docs/decisions/ADR-0008-interactive-province-list-freshness.md) records
+  the 24-hour interactive province-list freshness and stale fallback policy.
 
 ## Evidence and interpretation risks
 
 The scale script's timing is environment-dependent; its index-plan evidence is the
 stable query-bound evidence. This is historical screening, not investment advice.
+
+Interactive K-APT province-list search reuses a persisted full-province snapshot for
+24 hours across local restarts and name queries. At expiry it synchronously
+revalidates the complete province and atomically replaces the snapshot only after
+success; a failed refresh keeps matching stale candidates visible with the last
+successful refresh time. This list cache is separate from K-APT detail and
+transaction evidence.
 
 ## Verify in the repository
 

@@ -34,7 +34,7 @@ def test_legacy_v1_database_migrates_and_preserves_transaction(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 3
+    assert store.schema_version == 4
     assert store.load_transactions("apt-1") == (
         NormalizedTransaction(
             "apt-1",
@@ -109,7 +109,7 @@ def test_legacy_exact_duplicates_collapse_during_atomic_migration(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 3
+    assert store.schema_version == 4
     assert len(store.load_transactions("apt-1")) == 1
 
 
@@ -119,7 +119,7 @@ def test_invalid_schema_version_and_mismatched_month_are_failures(tmp_path):
     path = tmp_path / "future.db"
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
-        connection.execute("INSERT INTO schema_version VALUES (4)")
+        connection.execute("INSERT INTO schema_version VALUES (5)")
     import pytest
 
     with pytest.raises(ValueError, match="unsupported schema version"):
@@ -135,6 +135,67 @@ def test_invalid_schema_version_and_mismatched_month_are_failures(tmp_path):
         ),
     )
     assert result.failures and not store.coverage("apt-1", "unknown")
+
+
+def test_daily_api_usage_is_atomic_and_zero_inclusive(tmp_path):
+    store = SQLiteStore(tmp_path / "data.db")
+
+    assert store.api_usage_snapshot("2026-08-28", ("list", "detail", "trade")) == {
+        "list": 0,
+        "detail": 0,
+        "trade": 0,
+    }
+
+
+def test_schema_v3_database_migrates_to_v4_and_preserves_evidence(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "v3.db"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE schema_version (version INTEGER NOT NULL);
+            INSERT INTO schema_version VALUES (3);
+            CREATE TABLE apartments (internal_id TEXT PRIMARY KEY, display_name TEXT NOT NULL);
+            CREATE TABLE transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, apartment_id TEXT NOT NULL,
+                contract_date TEXT NOT NULL, price_krw INTEGER NOT NULL,
+                exclusive_area_sqm TEXT NOT NULL, transaction_type TEXT NOT NULL,
+                is_cancelled INTEGER NOT NULL, floor INTEGER, building TEXT, unit TEXT,
+                construction_year INTEGER, broker_location TEXT, source_name TEXT,
+                source_record_id TEXT, source_values TEXT NOT NULL, source_key TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX uq_transactions_source
+                ON transactions(apartment_id, COALESCE(source_name, ''), source_key);
+            CREATE TABLE monthly_coverage (
+                apartment_id TEXT NOT NULL, source_name TEXT NOT NULL, month TEXT NOT NULL,
+                fetched_at TEXT NOT NULL, PRIMARY KEY(apartment_id, source_name, month)
+            );
+            INSERT INTO apartments VALUES ('apt-1', 'Example');
+            INSERT INTO transactions VALUES
+                (1, 'apt-1', '2025-01-01', 100, '84', 'brokered', 0, NULL, NULL, NULL,
+                 NULL, NULL, 'fixture', 'row-1', '[]', 'stable-key');
+            """
+        )
+
+    store = SQLiteStore(path)
+
+    assert store.schema_version == 4
+    assert len(store.load_transactions("apt-1")) == 1
+    assert store.api_usage_snapshot("2026-08-28", ("list", "detail", "trade")) == {
+        "list": 0,
+        "detail": 0,
+        "trade": 0,
+    }
+    store.increment_api_usage("list", recorded_date="2026-08-28")
+    store.increment_api_usage("list", recorded_date="2026-08-28")
+    store.increment_api_usage("trade", recorded_date="2026-08-27")
+
+    assert store.api_usage_snapshot("2026-08-28", ("list", "detail", "trade")) == {
+        "list": 2,
+        "detail": 0,
+        "trade": 0,
+    }
 
 
 def test_source_provenance_mismatch_does_not_create_coverage(tmp_path):

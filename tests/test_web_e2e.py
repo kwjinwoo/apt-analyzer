@@ -20,6 +20,7 @@ from apt_analyzer.web import create_app
 
 class BrowserFixtureService:
     def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
+        time.sleep(0.08)
         values = (("a", "Alpha"), ("b", "Beta"))
         return tuple(
             ApartmentCandidate(key, label, "1234567890", f"{label} lot", f"{label} road")
@@ -36,6 +37,7 @@ class BrowserFixtureService:
     def retrieve(
         self, _candidate: ApartmentCandidate, apartment: Apartment, period: object
     ) -> tuple[NormalizedTransaction, ...]:
+        time.sleep(0.08)
         assert hasattr(period, "start")
         start = period.start  # type: ignore[attr-defined]
         return (
@@ -70,17 +72,27 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             browser = playwright.chromium.launch()
             page: Page = browser.new_page()
             page.goto(f"http://127.0.0.1:{port}/")
-            expect(page.locator("h1")).to_contain_text("apt-analyzer")
-            page.get_by_label("Apartment name").fill("Alpha")
-            page.get_by_role("button", name="Search").click()
-            page.get_by_role("button", name="Select").click()
+            expect(page.locator("h1")).to_contain_text("아파트 거래")
+            page.get_by_label("아파트 이름").fill("Alpha")
+            search_form = page.locator('form[action="/search"]')
+            search_form.get_by_role("button", name="검색하기").click()
+            expect(search_form.locator("#search-progress")).to_be_visible()
+            expect(search_form.get_by_role("button", name="검색하기")).to_be_disabled()
+            expect(page.locator('form[action="/search"] #search-progress')).to_be_hidden()
+            expect(page.locator('form[action="/search"] button[type="submit"]')).to_be_enabled()
+            page.get_by_role("button", name="이 단지 선택").click()
             page.locator('input[name="start"]').first.fill("2024-01-01")
             page.locator('input[name="end"]').first.fill("2024-12-31")
-            page.get_by_role("button", name="Update SQLite").click()
+            update_form = page.locator('form[action="/update"]')
+            update_form.get_by_role("button", name="SQLite 근거 갱신").click()
+            expect(update_form.locator("#update-progress")).to_be_visible()
+            expect(update_form.get_by_role("button", name="SQLite 근거 갱신")).to_be_disabled()
             page.wait_for_load_state("networkidle")
+            expect(page.locator('form[action="/update"] #update-progress')).to_be_hidden()
+            expect(page.locator('form[action="/update"] button[type="submit"]')).to_be_enabled()
             page.locator('input[name="start"]').last.fill("2024-01-01")
             page.locator('input[name="end"]').last.fill("2024-12-31")
-            page.get_by_role("button", name="Analyze").click()
+            page.get_by_role("button", name="분석 실행").click()
             page.wait_for_timeout(1000)
             expect(page.locator("#price-chart")).to_have_count(1)
             expect(page.locator("#volume-chart")).to_have_count(1)
@@ -88,14 +100,21 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             expect(page.locator("#volume-chart")).to_have_attribute("data-chart-ready", "true")
             assert page.locator("#price-chart").evaluate("(canvas) => canvas.width") > 0
             assert page.locator("#volume-chart").evaluate("(canvas) => canvas.width") > 0
-            expect(page.locator("table").nth(1)).to_contain_text("2024-01")
-            page.get_by_label("Apartment name").fill("Beta")
-            page.get_by_role("button", name="Search").click()
-            page.get_by_role("button", name="Select").click()
+            expect(page.get_by_role("table", name="월별 거래량")).to_contain_text("2024-01")
+            page.get_by_label("아파트 이름").fill("Beta")
+            page.get_by_role("button", name="검색하기").click()
+            page.get_by_role("button", name="이 단지 선택").click()
             expect(page.locator('select[name="apartment_ids"] option')).to_have_count(2)
             page.locator('input[name="start"]').first.fill("2024-01-01")
             page.locator('input[name="end"]').first.fill("2024-12-31")
-            page.get_by_role("button", name="Update SQLite").click()
+            second_update_form = page.locator('form[action="/update"]')
+            second_update_form.get_by_role("button", name="SQLite 근거 갱신").click()
+            expect(second_update_form.locator("#update-progress")).to_be_visible()
+            expect(
+                second_update_form.get_by_role("button", name="SQLite 근거 갱신")
+            ).to_be_disabled()
+            expect(page.locator('form[action="/update"] #update-progress')).to_be_hidden()
+            expect(page.locator('form[action="/update"] button[type="submit"]')).to_be_enabled()
             comparison = page.locator('form[action="/comparison"]')
             comparison.evaluate(
                 """(form) => {
@@ -105,18 +124,15 @@ def test_browser_workspace_full_deterministic_flow() -> None:
                 }"""
             )
             page.wait_for_load_state("networkidle")
-            expect(page.get_by_role("heading", name="Comparison subjects")).to_be_visible()
-            expect(page.locator("#workspace")).to_contain_text("complete")
+            expect(page.get_by_role("heading", name="아파트 비교 결과")).to_be_visible()
+            expect(page.locator("#workspace")).to_contain_text("완료")
             expect(page.locator("#workspace")).to_contain_text("1")
-            assert (
-                page.locator('form[action="/comparison"] input[aria-label="Overall start"]').count()
-                == 1
-            )
+            assert page.locator('form[action="/comparison"] input[name="start"]').count() == 1
             assert page.locator("#price-chart").count() == 0
             expect(page.locator("#workspace")).not_to_contain_text("Underlying volume")
-            expect(
-                page.get_by_role("link", name="Download equivalent JSON export")
-            ).to_have_attribute("href", "/export?kind=comparison")
+            expect(page.get_by_role("link", name="비교 결과 JSON 내려받기")).to_have_attribute(
+                "href", "/export?kind=comparison"
+            )
             export_response = page.request.get(f"http://127.0.0.1:{port}/export?kind=comparison")
             assert export_response.ok and len(export_response.json()["subjects"]) == 2
             assert "encoded-secret" not in page.content()

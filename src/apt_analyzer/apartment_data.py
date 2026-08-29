@@ -113,7 +113,9 @@ class ApartmentDataService:
             if needle and needle in normalize_name(candidate.name)
         )
 
-    def list_region(self, sido_code: str) -> tuple[ApartmentCandidate, ...]:
+    def list_region(
+        self, sido_code: str, *, use_cache: bool = True
+    ) -> tuple[ApartmentCandidate, ...]:
         """List all K-APT candidates in one explicitly requested region."""
         candidates: list[ApartmentCandidate] = []
         page = 1
@@ -127,6 +129,7 @@ class ApartmentDataService:
                     "_type": "xml",
                 },
                 source="K-APT apartment list",
+                use_cache=use_cache,
             )
             for row in result.records:
                 candidate_name = _pick(row, "kaptName")

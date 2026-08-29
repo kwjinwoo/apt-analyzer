@@ -1,27 +1,99 @@
 :root {
-  font-family: system-ui, sans-serif;
-  color: #1f2937;
-  background: #f8fafc;
+  font-family:
+    "Pretendard", system-ui, -apple-system, "Noto Sans KR", sans-serif;
+  color: #172033;
+  background: #f4f7fb;
+  line-height: 1.6;
+}
+* {
+  box-sizing: border-box;
 }
 body {
   margin: 0;
 }
 #workspace {
-  max-width: 1100px;
+  max-width: 1160px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 2rem 1rem 4rem;
+}
+.hero {
+  background: linear-gradient(135deg, #173b72, #2868b2);
+  color: #fff;
+  border-radius: 1rem;
+  padding: 2rem;
+  margin-bottom: 1rem;
+}
+.hero h1 {
+  margin: 0.25rem 0 0.75rem;
+  font-size: clamp(1.65rem, 4vw, 2.4rem);
+  line-height: 1.25;
+}
+.hero p {
+  max-width: 68rem;
+  margin: 0.5rem 0;
+}
+.eyebrow,
+.step {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #4772a7;
+  margin: 0 0 0.25rem;
+}
+.hero .eyebrow {
+  color: #d9e9ff;
+}
+.step {
+  color: #2563a6;
+}
+.state {
+  margin: 1rem 0;
+}
+.badge {
+  display: inline-block;
+  background: #e6f0ff;
+  border: 1px solid #b7d1f5;
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-weight: 700;
 }
 section {
-  background: white;
-  border: 1px solid #dbe3ef;
-  border-radius: 0.75rem;
-  padding: 1rem;
+  background: #fff;
+  border: 1px solid #d8e1ec;
+  border-radius: 0.85rem;
+  padding: 1.25rem;
   margin: 1rem 0;
-  box-shadow: 0 2px 8px #1f29370d;
+  box-shadow: 0 3px 12px #183b5c0b;
+}
+h2,
+h3,
+h4 {
+  line-height: 1.3;
+  margin: 0.2rem 0 0.75rem;
+}
+h2 {
+  font-size: 1.35rem;
+}
+.section-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.help,
+small {
+  color: #63738a;
+  font-size: 0.92rem;
+}
+.selected {
+  background: #f1f7ff;
+  border-left: 4px solid #3182ce;
+  padding: 0.6rem 0.75rem;
 }
 form {
   display: grid;
-  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
   align-items: end;
 }
 label,
@@ -29,61 +101,227 @@ fieldset {
   display: grid;
   gap: 0.35rem;
 }
+fieldset {
+  grid-column: 1 / -1;
+  border: 1px solid #d8e1ec;
+  border-radius: 0.6rem;
+  padding: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+legend {
+  font-weight: 700;
+  padding: 0 0.35rem;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
 input,
 select,
-button {
-  min-height: 2.5rem;
+textarea,
+button,
+.button {
+  min-height: 2.65rem;
   font: inherit;
-  padding: 0.35rem 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #c5d1df;
+  border-radius: 0.45rem;
 }
-button {
+textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  background: #1d4ed8;
-  color: white;
+  background: #1d5faa;
+  color: #fff;
   border: 0;
-  border-radius: 0.4rem;
+  text-decoration: none;
+  font-weight: 700;
+}
+.secondary {
+  background: #e9f1fb;
+  color: #194d85;
+  border: 1px solid #b8cee8;
 }
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible {
   outline: 3px solid #f59e0b;
   outline-offset: 2px;
 }
+.request-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #194d85;
+  font-weight: 700;
+}
+.request-progress progress {
+  width: 7rem;
+  min-height: 0.8rem;
+}
+.htmx-indicator {
+  display: none;
+}
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: flex;
+}
+.api-usage {
+  background: #f4f8fc;
+}
+.api-usage .section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.api-usage .section-heading strong {
+  font-size: 1.5rem;
+  color: #194d85;
+}
+.api-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+.api-usage-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem;
+  border: 1px solid #d3dfeb;
+  border-radius: 0.6rem;
+  background: #fff;
+}
+.api-usage-card progress {
+  width: 100%;
+  height: 0.7rem;
+}
+.api-usage-card small {
+  color: #53677d;
+}
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
 table {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
-  margin-top: 0.75rem;
 }
 th,
 td {
-  padding: 0.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0.65rem;
+  border-bottom: 1px solid #e5eaf0;
   text-align: left;
+  vertical-align: top;
+}
+th {
+  background: #f7f9fc;
+  white-space: nowrap;
+}
+.candidate-results table {
+  table-layout: fixed;
+}
+.candidate-results td,
+.candidate-results th {
+  vertical-align: middle;
+}
+.candidate-results td:first-child {
+  width: 24%;
+}
+.candidate-results .candidate-address {
+  width: 56%;
+  overflow-wrap: anywhere;
+}
+.candidate-results td:last-child {
+  width: 20%;
+  text-align: center;
+}
+.candidate-results form {
+  display: block;
+}
+@media (max-width: 720px) {
+  .api-usage-grid {
+    grid-template-columns: 1fr;
+  }
+  .api-usage .section-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+}
+.alert {
+  background: #fff0f0;
+  border: 1px solid #f3b5b5;
+  color: #9b2525;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+}
+.result-card {
+  border-top: 1px solid #e5eaf0;
+  padding: 0.7rem 0;
+}
+details {
+  grid-column: 1 / -1;
+  border: 1px solid #d8e1ec;
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+  margin: 0.25rem 0;
+}
+summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.rule-box {
+  background: #f8fbff;
 }
 canvas {
   width: 100%;
   min-height: 260px;
   margin-top: 1rem;
 }
-.state {
-  font-weight: 600;
-}
-[role="alert"] {
-  background: #fee2e2;
-  padding: 0.75rem;
-}
-#analysis-data,
-details pre {
+pre {
   max-height: 20rem;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  background: #f6f8fb;
+  padding: 1rem;
+  border-radius: 0.5rem;
 }
-@media (min-width: 700px) {
-  form {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (max-width: 720px) {
+  #workspace {
+    padding: 1rem 0.65rem 3rem;
   }
+  .hero {
+    padding: 1.35rem;
+  }
+  form,
   fieldset {
-    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+  }
+  .section-heading {
+    display: block;
+  }
+  .section-heading .button {
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+  button,
+  .button {
+    width: 100%;
+  }
+  section {
+    padding: 1rem;
   }
 }

@@ -9,7 +9,7 @@ origin: "Initial requirements R1"
 supersedes: []
 superseded_by: null
 related_requirements: [R-002]
-related_decisions: [ADR-0003]
+related_decisions: [ADR-0003, ADR-0008]
 ---
 
 # R-001: Apartment search

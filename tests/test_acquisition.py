@@ -62,6 +62,38 @@ def test_transport_retry_is_bounded_and_exhaustion_is_availability_failure() -> 
     assert calls == 3
 
 
+def test_transport_observer_counts_attempts_but_not_cache_hits() -> None:
+    payload = (
+        b"<response><header><resultCode>000</resultCode></header><body><items/></body></response>"
+    )
+    observed: list[str] = []
+    client = DataGoKrClient(
+        "encoded",
+        transport=lambda _url, _timeout: payload,
+        request_observer=observed.append,
+    )
+
+    client.get_xml("https://example.test/list", {}, source="K-APT apartment list")
+    client.get_xml("https://example.test/list", {}, source="K-APT apartment list")
+
+    assert observed == ["https://example.test/list"]
+
+
+def test_transport_observer_counts_each_retry_attempt() -> None:
+    observed: list[str] = []
+
+    def unavailable(_url: str, _timeout: float) -> bytes:
+        raise urllib.error.URLError("offline")
+
+    client = DataGoKrClient(
+        "encoded", transport=unavailable, retries=2, request_observer=observed.append
+    )
+    with pytest.raises(AvailabilityError):
+        client.get_xml("https://example.test/trade", {}, source="MOLIT apartment sale transactions")
+
+    assert observed == ["https://example.test/trade"] * 3
+
+
 def test_load_service_key_prefers_process_environment_over_dotenv(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("DATA_GO_KR_SERVICE_KEY", "process-sentinel")
     (tmp_path / ".env").write_text("DATA_GO_KR_SERVICE_KEY=dotenv-sentinel\n", encoding="utf-8")

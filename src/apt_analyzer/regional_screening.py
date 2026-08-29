@@ -75,7 +75,7 @@ class CandidateCache:
         if snapshot is None:
             return CandidateRefreshReport(CandidateRefreshState.CACHE_MISS)
         state = CandidateRefreshState.FRESH
-        if cutoff is not None and snapshot.refreshed_at < cutoff.isoformat():
+        if cutoff is not None and snapshot.refreshed_at <= cutoff.isoformat():
             state = CandidateRefreshState.STALE
         if not snapshot.candidates and state is CandidateRefreshState.FRESH:
             state = CandidateRefreshState.VALID_EMPTY
@@ -195,7 +195,7 @@ class SQLiteCandidateCache:
         if (
             coverage is not None
             and cutoff is not None
-            and coverage["fetched_at"] < cutoff.isoformat()
+            and coverage["fetched_at"] <= cutoff.isoformat()
         ):
             successful_state = CandidateRefreshState.STALE
         if attempt is not None and attempt["status"] == "failed":
