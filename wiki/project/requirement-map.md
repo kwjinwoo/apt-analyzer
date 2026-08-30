@@ -15,7 +15,8 @@ tags:
 
 ## Scope
 
-This hub groups the twenty-one accepted requirements by knowledge dependency instead of repeating their normative text.
+This hub groups the twenty-three accepted requirements by knowledge dependency
+instead of repeating their normative text.
 
 ## Knowledge
 
@@ -43,6 +44,9 @@ Interpretation and presentation
 Local interface
   R-020 → R-001/R-002/R-013/R-014/R-016/R-017/R-019
 
+Local preferences
+  R-023 → R-001/R-016/R-020
+
 Multi-complex use
   R-016 → R-015 → R-021
 ```
@@ -58,6 +62,8 @@ The arrows express knowledge dependency, not implementation order or control flo
 - End-to-end dependency is summarized by the [MVP knowledge map](mvp-knowledge-map.md).
 - The local interface boundary is defined by [R-020](../../docs/requirements/R-020-local-browser-analysis-workspace.md)
   and [ADR-0005](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
+- Local saved interests are mapped by [R-023](../../docs/requirements/R-023-saved-apartment-interests.md)
+  and [Saved apartment interests](saved-apartment-interests.md).
 - Regional descriptive interpretation extends through [Regional relative analysis](regional-relative-analysis.md).
 
 ## Requirements
@@ -92,3 +98,4 @@ R-021 has independent profile and live multi-region evidence linked from its Req
 - [Regional relative analysis](regional-relative-analysis.md)
 - [Analysis context](../domain/analysis-context.md)
 - [Transaction population](../data/transaction-population.md)
+- [Saved apartment interests](saved-apartment-interests.md)

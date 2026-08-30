@@ -38,6 +38,7 @@ Use [TEMPLATE.md](TEMPLATE.md) when adding a requirement.
 | [R-020](R-020-local-browser-analysis-workspace.md) | Local browser analysis workspace | accepted | P0 | Local-web direction |
 | [R-021](R-021-regional-relative-profile.md) | Regional relative profile | accepted | P2 | Roadmap M6 |
 | [R-022](R-022-local-productized-screening.md) | Local productized analysis and screening workspace | accepted | P0 | Roadmap M7 |
+| [R-023](R-023-saved-apartment-interests.md) | Saved apartment interests | accepted | P1 | User-approved MVP direction |
 
 ## Change policy
 

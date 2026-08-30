@@ -284,6 +284,7 @@ class Workspace:
     period: AnalysisPeriod | None = None
     status: str = "idle"
     search_sido_code: str = "11"
+    selected_sido_code: str | None = None
     search_candidates: tuple[ApartmentCandidate, ...] = ()
     search_cache_notice: str | None = None
     apartments: dict[str, Apartment] = field(default_factory=lambda: {})
@@ -306,6 +307,7 @@ def create_app(
         app.mount("/static", StaticFiles(directory=static_directory), name="static")
     templates = Jinja2Templates(directory=_TEMPLATE_DIRECTORY)
     workspace = Workspace()
+    app.state.workspace = workspace
     owned_store = store or SQLiteStore(
         os.environ.get("APT_ANALYZER_DB", ":memory:"), check_same_thread=False
     )
@@ -390,10 +392,59 @@ def create_app(
                 resolution.apartment,
                 "selected",
             )
+            workspace.selected_sido_code = workspace.search_sido_code
             owned_store.save_apartment(resolution.apartment)
             workspace.apartments[resolution.apartment.internal_id] = resolution.apartment
             _hydrate_area_groups(workspace, owned_store, resolution.apartment.internal_id)
         return _page(request, templates, workspace, (enriched,))
+
+    @app.post("/interests/save", response_class=HTMLResponse)
+    def save_interest(request: Request) -> HTMLResponse:
+        if (
+            workspace.apartment is None
+            or workspace.candidate is None
+            or workspace.selected_sido_code is None
+        ):
+            workspace.status = "failed"
+            return _page(
+                request,
+                templates,
+                workspace,
+                (),
+                {"error": "먼저 명시적으로 단지를 선택해 주세요."},
+            )
+        try:
+            owned_store.save_interest(
+                workspace.candidate,
+                workspace.apartment,
+                region_code=workspace.selected_sido_code,
+            )
+        except ValueError as error:
+            workspace.status = "failed"
+            return _page(request, templates, workspace, (), {"error": str(error)})
+        workspace.status = "selected"
+        return _page(request, templates, workspace, ())
+
+    @app.post("/interests/select", response_class=HTMLResponse)
+    def select_interest(request: Request, apartment_id: str = Form(...)) -> HTMLResponse:
+        interest = owned_store.get_interest(apartment_id)
+        if interest is None:
+            workspace.status = "failed"
+            return _page(
+                request, templates, workspace, (), {"error": "저장된 관심 단지를 찾을 수 없습니다."}
+            )
+        workspace.candidate = interest.candidate
+        workspace.apartment = interest.apartment
+        workspace.search_sido_code = interest.region_code
+        workspace.selected_sido_code = interest.region_code
+        workspace.status = "selected"
+        _hydrate_area_groups(workspace, owned_store, interest.apartment.internal_id)
+        return _page(request, templates, workspace, ())
+
+    @app.post("/interests/remove", response_class=HTMLResponse)
+    def remove_interest(request: Request, apartment_id: str = Form(...)) -> HTMLResponse:
+        owned_store.remove_interest(apartment_id)
+        return _page(request, templates, workspace, ())
 
     @app.post("/update", response_class=HTMLResponse)
     def update(
@@ -999,7 +1050,19 @@ def create_app(
             serialized,
         )
 
-    _ = (root, search, select, update, analysis, export, screening, comparison)
+    _ = (
+        root,
+        search,
+        select,
+        save_interest,
+        select_interest,
+        remove_interest,
+        update,
+        analysis,
+        export,
+        screening,
+        comparison,
+    )
     return app
 
 
@@ -1038,6 +1101,7 @@ def _page(
             "api_usage": api_usage,
             "api_usage_total": sum(int(item["used"]) for item in api_usage),
             "comparison_area_groups": _comparison_area_groups(workspace),
+            "interests": usage_store.list_interests(),
             "ui": {
                 "labels": _UI_LABELS,
                 "metric_labels": _UI_METRIC_LABELS,

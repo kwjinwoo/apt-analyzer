@@ -3,7 +3,7 @@ title: Transaction Quality
 type: data
 role: topic
 status: active
-updated: 2026-08-22
+updated: 2026-08-30
 aliases:
   - Transaction data quality
 tags:
@@ -22,6 +22,12 @@ Transaction quality covers the source and normalization conditions that determin
 Quality begins with explicit source outcomes: valid records, a valid empty response, availability failure, and parsing failure must not collapse into one state. Normalization preserves analytical meaning for contract date, price, exclusive area, transaction type, and cancellation while retaining traceability to relevant source values.
 
 Duplicates and cancellations are temporal data problems, not only import-time problems. Repeated queries must not multiply one transaction, while later source corrections may legitimately change a prior result. Caching reduces repeated calls but cannot make freshness invisible.
+
+Transaction-name differences across official sources require the same identity
+discipline as address matching. [ADR-0009](../../docs/decisions/ADR-0009-explicit-transaction-name-aliases.md)
+allows only explicit K-APT source-ID-scoped aliases with exact legal-dong and
+lot evidence; plausible but unmapped compound-name components are identity
+failures rather than valid-empty evidence.
 
 Direct transactions and unusual prices require inspection because they can alter both activity and price evidence. Neither category is automatically invalid. If these topics accumulate independent sources, decisions, and tests, this page should remain a hub while they split into concept pages under the decomposition rules.
 
@@ -44,6 +50,7 @@ Direct transactions and unusual prices require inspection because they can alter
 - [OQ-006: Default direct-transaction policy](../../docs/open-questions.md#oq-006-default-direct-transaction-policy)
 - [OQ-007: Outlier comparison policy](../../docs/open-questions.md#oq-007-outlier-comparison-policy)
 - [ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) accepts the official sources and initial duplicate, cache provenance, retry, and identity policies.
+- [ADR-0009](../../docs/decisions/ADR-0009-explicit-transaction-name-aliases.md) accepts explicit source-scoped aliases and conservative mismatch handling.
 
 ## Evidence and interpretation risks
 
@@ -52,10 +59,11 @@ Direct transactions and unusual prices require inspection because they can alter
 - A duplicate constraint can be too weak and admit copies or too strong and collapse legitimate trades.
 - Retry behavior can create partial coverage if failures are hidden.
 - Exact values can be altered by parsing or presentation conversion.
+- Explicit alias mappings require manual maintenance and may become stale as source naming changes.
 
 ## Verify in the repository
 
-[`NormalizedTransaction`](../../src/apt_analyzer/domain.py) preserves normalized values and source traceability. [`DataGoKrClient`](../../src/apt_analyzer/acquisition.py) exposes outcomes, bounded retries, and cache provenance; [`test_acquisition.py`](../../tests/test_acquisition.py) and [`test_m1.py`](../../tests/test_m1.py) verify encoded-key handling, empty data, normalization, exact-row deduplication, and cache visibility.
+[`NormalizedTransaction`](../../src/apt_analyzer/domain.py) preserves normalized values and source traceability. [`DataGoKrClient`](../../src/apt_analyzer/acquisition.py) exposes outcomes, bounded retries, and cache provenance; [`ApartmentDataService`](../../src/apt_analyzer/apartment_data.py) applies explicit source-scoped aliases and conservative mismatch detection. [`test_acquisition.py`](../../tests/test_acquisition.py) and [`test_m1.py`](../../tests/test_m1.py) verify encoded-key handling, empty data, normalization, identity-safe aliases, exact-row deduplication, and cache visibility.
 
 ## Related pages
 

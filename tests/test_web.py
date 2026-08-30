@@ -65,6 +65,78 @@ class FakeSearch:
         )
 
 
+def test_interest_routes_persist_idempotently_and_restore_without_comparison_membership(tmp_path):
+    store = SQLiteStore(tmp_path / "data.db")
+    app = create_app(search_service=FakeSearch(), store=store)
+    client = TestClient(app)
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+
+    saved = client.post("/interests/save")
+    assert saved.status_code == 200
+    assert "관심 단지" in saved.text
+    client.post("/interests/save")
+    assert len(store.list_interests()) == 1
+
+    restarted = create_app(search_service=FakeSearch(), store=store)
+    restarted_client = TestClient(restarted)
+    listed = restarted_client.get("/")
+    assert "Alpha" in listed.text
+    selected = restarted_client.post("/interests/select", data={"apartment_id": "a"})
+    assert selected.status_code == 200
+    assert "선택한 단지: <strong>Alpha</strong>" in selected.text
+    assert restarted.state.workspace.apartment == Apartment("a", "Alpha")
+    assert restarted.state.workspace.apartments == {}
+
+
+def test_saving_current_selection_keeps_the_selection_region_after_a_later_search(tmp_path):
+    store = SQLiteStore(tmp_path / "data.db")
+    client = TestClient(create_app(search_service=FakeSearch(), store=store))
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post("/search", data={"name": "Beta", "sido_code": "41"})
+
+    response = client.post("/interests/save")
+
+    assert response.status_code == 200
+    assert store.list_interests()[0].region_code == "11"
+
+
+def test_interest_remove_preserves_evidence_and_requires_resolved_selection(tmp_path):
+    store = SQLiteStore(tmp_path / "data.db")
+    app = create_app(search_service=FakeSearch(), store=store)
+    client = TestClient(app)
+    assert client.post("/interests/save").status_code == 200
+    assert store.list_interests() == ()
+
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post("/interests/save")
+    transaction = NormalizedTransaction(
+        "a",
+        date(2024, 1, 15),
+        100,
+        Decimal("84"),
+        TransactionType.BROKERED,
+        False,
+        source_name="MOLIT apartment sale transactions",
+        source_record_id="fixture-1",
+    )
+    store.update_incremental(
+        Apartment("a", "Alpha"),
+        AnalysisPeriod(date(2024, 1, 1), date(2024, 1, 31)),
+        lambda _month: (transaction,),
+        source_name="MOLIT apartment sale transactions",
+    )
+    removed = client.post("/interests/remove", data={"apartment_id": "a"})
+    assert removed.status_code == 200
+    assert store.list_interests() == ()
+    assert store.load_transactions("a") == (transaction,)
+    assert tuple(store.coverage("a", "MOLIT apartment sale transactions")) == ("202401",)
+    assert store.coverage_states("a", "MOLIT apartment sale transactions") == {"202401": "complete"}
+    assert app.state.workspace.apartment == Apartment("a", "Alpha")
+
+
 class EmptySearch(FakeSearch):
     def retrieve(
         self, candidate: ApartmentCandidate, apartment: Apartment, period: object

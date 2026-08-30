@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from apt_analyzer.apartment_data import ApartmentCandidate, months
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 SEOUL = ZoneInfo("Asia/Seoul")
 
 
@@ -41,6 +41,16 @@ class UpdateReport:
     duplicate_count: int
     failures: tuple[MonthUpdate, ...]
     updates: tuple[MonthUpdate, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SavedApartmentInterest:
+    """Persisted apartment preference with the evidence needed to restore it."""
+
+    candidate: ApartmentCandidate
+    apartment: Apartment
+    source_name: str
+    region_code: str
 
 
 class SQLiteStore:
@@ -98,6 +108,91 @@ class SQLiteStore:
             (apartment.internal_id, apartment.display_name),
         )
         self._connection.commit()
+
+    def save_interest(
+        self,
+        candidate: ApartmentCandidate,
+        apartment: Apartment,
+        *,
+        region_code: str,
+        source_name: str = "K-APT apartment list",
+    ) -> None:
+        """Save one resolved apartment preference and its identity evidence idempotently."""
+        if not (
+            candidate.source_id
+            and len(candidate.legal_dong_code) == 10
+            and candidate.lot_address
+            and candidate.road_address
+            and region_code
+            and source_name
+        ):
+            raise ValueError("saved interest requires complete apartment identity evidence")
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO apartments(internal_id, display_name) VALUES (?, ?) "
+                "ON CONFLICT(internal_id) DO UPDATE SET display_name=excluded.display_name",
+                (apartment.internal_id, apartment.display_name),
+            )
+            self._connection.execute(
+                "INSERT INTO saved_interests(apartment_id, display_name, source_name, region_code, "
+                "source_id, candidate_name, legal_dong_code, lot_address, road_address, saved_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(apartment_id) DO UPDATE SET display_name=excluded.display_name, "
+                "source_name=excluded.source_name, region_code=excluded.region_code, "
+                "source_id=excluded.source_id, candidate_name=excluded.candidate_name, "
+                "legal_dong_code=excluded.legal_dong_code, lot_address=excluded.lot_address, "
+                "road_address=excluded.road_address",
+                (
+                    apartment.internal_id,
+                    apartment.display_name,
+                    source_name,
+                    region_code,
+                    candidate.source_id,
+                    candidate.name,
+                    candidate.legal_dong_code,
+                    candidate.lot_address,
+                    candidate.road_address,
+                    datetime.now(UTC).replace(microsecond=0).isoformat(),
+                ),
+            )
+
+    def list_interests(self) -> tuple[SavedApartmentInterest, ...]:
+        """Return saved interests in deterministic internal-identity order."""
+        rows = self._connection.execute(
+            "SELECT apartment_id, display_name, source_name, region_code, source_id, "
+            "candidate_name, legal_dong_code, lot_address, road_address "
+            "FROM saved_interests ORDER BY apartment_id"
+        ).fetchall()
+        return tuple(
+            SavedApartmentInterest(
+                ApartmentCandidate(
+                    str(row["source_id"]),
+                    str(row["candidate_name"]),
+                    str(row["legal_dong_code"]),
+                    str(row["lot_address"]),
+                    str(row["road_address"]),
+                ),
+                Apartment(str(row["apartment_id"]), str(row["display_name"])),
+                str(row["source_name"]),
+                str(row["region_code"]),
+            )
+            for row in rows
+        )
+
+    def get_interest(self, apartment_id: str) -> SavedApartmentInterest | None:
+        """Return one saved interest by its server-owned internal apartment ID."""
+        return next(
+            (item for item in self.list_interests() if item.apartment.internal_id == apartment_id),
+            None,
+        )
+
+    def remove_interest(self, apartment_id: str) -> bool:
+        """Remove only the preference row, preserving apartment and transaction evidence."""
+        with self._connection:
+            cursor = self._connection.execute(
+                "DELETE FROM saved_interests WHERE apartment_id=?", (apartment_id,)
+            )
+        return cursor.rowcount == 1
 
     def save_transaction(self, transaction: NormalizedTransaction) -> bool:
         """Persist one normalized transaction, returning whether it was new."""
@@ -464,20 +559,23 @@ class SQLiteStore:
             )
             self._migrate_v3()
             self._migrate_v4()
+            self._migrate_v5()
             self._connection.commit()
             return
         version = int(row[0])
-        if version not in (1, 2, 3, CURRENT_SCHEMA_VERSION):
+        if version not in (1, 2, 3, 4, CURRENT_SCHEMA_VERSION):
             raise ValueError(f"unsupported schema version: {version}")
         if version == 1:
             self._migrate_v1()
             version = 2
-        if version in (2, 3, CURRENT_SCHEMA_VERSION):
+        if version in (2, 3, 4, CURRENT_SCHEMA_VERSION):
             self._migrate_v3()
             self._migrate_v4()
+            self._migrate_v5()
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS apartments (internal_id TEXT PRIMARY KEY, display_name TEXT NOT NULL)"
         )
+        self._migrate_v5()
         self._connection.commit()
 
     def _migrate_v3(self) -> None:
@@ -527,6 +625,21 @@ class SQLiteStore:
                 PRIMARY KEY(usage_date, service_id)
             );
             UPDATE schema_version SET version=4;
+            """
+        )
+
+    def _migrate_v5(self) -> None:
+        """Add persisted local apartment-interest preferences and identity evidence."""
+        self._connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS saved_interests (
+                apartment_id TEXT PRIMARY KEY, display_name TEXT NOT NULL,
+                source_name TEXT NOT NULL, region_code TEXT NOT NULL,
+                source_id TEXT NOT NULL, candidate_name TEXT NOT NULL,
+                legal_dong_code TEXT NOT NULL, lot_address TEXT NOT NULL,
+                road_address TEXT NOT NULL, saved_at TEXT NOT NULL
+            );
+            UPDATE schema_version SET version=5;
             """
         )
 

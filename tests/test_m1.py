@@ -129,6 +129,125 @@ def test_retrieval_uses_legal_code_and_rejects_name_only_address_mismatch() -> N
     assert "LAWD_CD=11215" in seen
 
 
+def test_retrieval_accepts_verified_molit_aliases_for_kapt_aggregate() -> None:
+    names = ("벽적골두산", "벽적골한신", "벽적골우성")
+    items = "".join(
+        f"<item><aptNm>{name}</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun>"
+        "<dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay>"
+        "<dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>"
+        for name in names
+    )
+    xml = (
+        "<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>"
+        f"<body><items>{items}</items></body></response>"
+    ).encode()
+    service = ApartmentDataService(DataGoKrClient("encoded", transport=lambda _url, _timeout: xml))
+    candidate = ApartmentCandidate(
+        "A44347025", "벽적골두산한신우성", "4111710500", "경기도 수원시 영통동 973-3", "road"
+    )
+
+    result = service.retrieve(
+        candidate,
+        Apartment("apt-1", candidate.name),
+        AnalysisPeriod(date(2025, 1, 1), date(2025, 1, 31)),
+    )
+
+    assert len(result) == 3
+    assert {dict(item.source_values)["aptNm"] for item in result} == set(names)
+
+
+def test_unregistered_compound_name_components_require_explicit_mapping() -> None:
+    xml = """<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header><body><items>
+    <item><aptNm>벽적골두산</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    <item><aptNm>벽적골한신</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>3</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    <item><aptNm>벽적골우성</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>4</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    </items></body></response>""".encode()
+    service = ApartmentDataService(DataGoKrClient("encoded", transport=lambda _url, _timeout: xml))
+    candidate = ApartmentCandidate(
+        "synthetic", "벽적골두산한신우성", "4111710500", "경기도 수원시 영통동 973-3", "road"
+    )
+
+    with pytest.raises(IdentityMismatchError, match="explicit alias mapping"):
+        service.retrieve(
+            candidate,
+            Apartment("apt-1", candidate.name),
+            AnalysisPeriod(date(2025, 1, 1), date(2025, 1, 31)),
+        )
+
+
+def test_unregistered_compound_components_fail_even_with_an_exact_record() -> None:
+    xml = """<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header><body><items>
+    <item><aptNm>벽적골두산한신우성</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    <item><aptNm>벽적골한신</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    <item><aptNm>벽적골우성</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>3</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    </items></body></response>""".encode()
+    service = ApartmentDataService(DataGoKrClient("encoded", transport=lambda _url, _timeout: xml))
+    candidate = ApartmentCandidate(
+        "synthetic", "벽적골두산한신우성", "4111710500", "경기도 수원시 영통동 973-3", "road"
+    )
+
+    with pytest.raises(IdentityMismatchError, match="explicit alias mapping"):
+        service.retrieve(
+            candidate,
+            Apartment("apt-1", candidate.name),
+            AnalysisPeriod(date(2025, 1, 1), date(2025, 1, 31)),
+        )
+
+
+def test_unrelated_same_lot_name_does_not_mask_compound_component_mismatch() -> None:
+    xml = """<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header><body><items>
+    <item><aptNm>벽적골두산</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>1</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    <item><aptNm>벽적골한신</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    <item><aptNm>벽적골우성</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>3</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    <item><aptNm>청운주공</aptNm><umdNm>영통동</umdNm><jibun>973-3</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>4</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    </items></body></response>""".encode()
+    service = ApartmentDataService(DataGoKrClient("encoded", transport=lambda _url, _timeout: xml))
+    candidate = ApartmentCandidate(
+        "synthetic", "벽적골두산한신우성", "4111710500", "경기도 수원시 영통동 973-3", "road"
+    )
+
+    with pytest.raises(IdentityMismatchError, match="explicit alias mapping"):
+        service.retrieve(
+            candidate,
+            Apartment("apt-1", candidate.name),
+            AnalysisPeriod(date(2025, 1, 1), date(2025, 1, 31)),
+        )
+
+
+def test_verified_alias_never_overrides_lot_or_legal_dong_evidence() -> None:
+    xml = """<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header><body><items>
+    <item><aptNm>벽적골두산</aptNm><umdNm>영통동</umdNm><jibun>999-1</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    </items></body></response>""".encode()
+    service = ApartmentDataService(DataGoKrClient("encoded", transport=lambda _url, _timeout: xml))
+    candidate = ApartmentCandidate(
+        "A44347025", "벽적골두산한신우성", "4111710500", "경기도 수원시 영통동 973-3", "road"
+    )
+
+    with pytest.raises(IdentityMismatchError):
+        service.retrieve(
+            candidate,
+            Apartment("apt-1", candidate.name),
+            AnalysisPeriod(date(2025, 1, 1), date(2025, 1, 31)),
+        )
+
+
+def test_unrelated_same_lot_name_remains_a_valid_empty_result() -> None:
+    xml = """<response><header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header><body><items>
+    <item><aptNm>청운주공</aptNm><umdNm>청운동</umdNm><jibun>1</jibun><dealYear>2025</dealYear><dealMonth>1</dealMonth><dealDay>2</dealDay><dealAmount>10,000</dealAmount><excluUseAr>84.9</excluUseAr></item>
+    </items></body></response>""".encode()
+    service = ApartmentDataService(DataGoKrClient("encoded", transport=lambda _url, _timeout: xml))
+    candidate = ApartmentCandidate("ordinary", "청운현대", "1111010100", "서울 청운동 1", "road")
+
+    assert (
+        service.retrieve(
+            candidate,
+            Apartment("apt-1", candidate.name),
+            AnalysisPeriod(date(2025, 1, 1), date(2025, 1, 31)),
+        )
+        == ()
+    )
+
+
 def test_cache_result_cannot_masquerade_as_live() -> None:
     calls = 0
 

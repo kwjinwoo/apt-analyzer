@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -32,6 +32,34 @@ class ApartmentCandidate:
     legal_dong_code: str
     lot_address: str
     road_address: str
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionNameAliasPolicy:
+    """Map source-specific apartment IDs to explicitly verified transaction names."""
+
+    aliases_by_source_id: Mapping[str, frozenset[str]]
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, Iterable[str]]) -> TransactionNameAliasPolicy:
+        """Normalize an auditable source-ID-scoped alias mapping."""
+        return cls(
+            {
+                source_id: frozenset(
+                    normalize_name(alias) for alias in aliases if normalize_name(alias)
+                )
+                for source_id, aliases in values.items()
+            }
+        )
+
+    def aliases_for(self, source_id: str) -> frozenset[str]:
+        """Return normalized aliases registered for one source apartment ID."""
+        return self.aliases_by_source_id.get(source_id, frozenset())
+
+
+DEFAULT_TRANSACTION_NAME_ALIASES = TransactionNameAliasPolicy.from_mapping(
+    {"A44347025": ("벽적골두산", "벽적골한신", "벽적골우성")}
+)
 
 
 class ResolutionStatus(StrEnum):
@@ -100,9 +128,25 @@ def months(period: AnalysisPeriod) -> tuple[str, ...]:
 class ApartmentDataService:
     """Coordinate source search, explicit selection, and period retrieval."""
 
-    def __init__(self, client: DataGoKrClient) -> None:
+    def __init__(
+        self,
+        client: DataGoKrClient,
+        *,
+        transaction_name_aliases: TransactionNameAliasPolicy
+        | Mapping[str, Iterable[str]]
+        | None = None,
+    ) -> None:
         """Use the provided acquisition boundary for official-source calls."""
         self._client = client
+        self._transaction_name_aliases = (
+            transaction_name_aliases
+            if isinstance(transaction_name_aliases, TransactionNameAliasPolicy)
+            else (
+                DEFAULT_TRANSACTION_NAME_ALIASES
+                if transaction_name_aliases is None
+                else TransactionNameAliasPolicy.from_mapping(transaction_name_aliases)
+            )
+        )
 
     def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
         """Search K-APT records and return distinguishable matching candidates."""
@@ -188,6 +232,10 @@ class ApartmentDataService:
         """Retrieve all intersecting months and enforce inclusive day boundaries."""
         records: dict[str, NormalizedTransaction] = {}
         mismatched_same_name = False
+        same_lot_unregistered_names: set[str] = set()
+        allowed_names = {normalize_name(candidate.name)} | set(
+            self._transaction_name_aliases.aliases_for(candidate.source_id)
+        )
         lawd = candidate.legal_dong_code[:5]
         if len(lawd) != 5:
             raise ValueError("candidate must provide a legal-dong code")
@@ -198,7 +246,10 @@ class ApartmentDataService:
                 source="MOLIT apartment sale transactions",
             )
             for row in result.records:
-                if normalize_name(_pick(row, "aptNm", "아파트")) != normalize_name(candidate.name):
+                row_name = normalize_name(_pick(row, "aptNm", "아파트"))
+                if row_name not in allowed_names:
+                    if _matches_lot_address(row, candidate.lot_address):
+                        same_lot_unregistered_names.add(row_name)
                     continue
                 if not _matches_lot_address(row, candidate.lot_address):
                     mismatched_same_name = True
@@ -208,7 +259,11 @@ class ApartmentDataService:
                     records[transaction.source_record_id or ""] = transaction
         if not records and mismatched_same_name:
             raise IdentityMismatchError(
-                "same-name transactions conflict with selected lot-address evidence"
+                "same-name or explicitly aliased transactions conflict with selected lot-address evidence"
+            )
+        if _has_unregistered_component_gap(candidate.name, same_lot_unregistered_names):
+            raise IdentityMismatchError(
+                "same-lot component names require explicit alias mapping for this apartment source ID"
             )
         return tuple(
             sorted(
@@ -276,6 +331,28 @@ def _matches_lot_address(row: Mapping[str, str], lot_address: str) -> bool:
     return normalize_name(_pick(row, "umdNm", "법정동")) == normalize_name(dong) and normalize_name(
         _pick(row, "jibun", "지번")
     ) == normalize_name(lot)
+
+
+def _has_unregistered_component_gap(combined_name: str, observed_names: set[str]) -> bool:
+    """Detect multiple same-lot names that conservatively resemble a compound name."""
+    normalized_combined = normalize_name(combined_name)
+    components = tuple(
+        sorted(name for name in observed_names if len(name) >= 2 and name != normalized_combined)
+    )
+    if len(components) < 2:
+        return False
+    for left_index, left in enumerate(components[:-1]):
+        for right in components[left_index + 1 :]:
+            prefix = left
+            while prefix and not right.startswith(prefix):
+                prefix = prefix[:-1]
+            if len(prefix) < 2:
+                continue
+            remainder = normalized_combined[len(prefix) :]
+            suffixes = (left[len(prefix) :], right[len(prefix) :])
+            if all(len(suffix) >= 2 and suffix in remainder for suffix in suffixes):
+                return True
+    return False
 
 
 def _optional(value: str) -> str | None:

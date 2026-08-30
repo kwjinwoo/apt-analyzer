@@ -22,7 +22,7 @@ Apartment identity is the relationship between a real apartment complex, source-
 
 A display name cannot establish identity because names can be duplicated, normalized differently, or changed. Transaction and apartment-metadata sources may also lack a shared canonical identifier. Identity resolution therefore sits between source acquisition and every downstream population or comparison.
 
-[ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) accepts K-APT source ID plus legal-dong, address, and normalized-name values as initial evidence. Only an explicitly selected single candidate receives a project identity; sparse or ambiguous evidence never becomes an automatic cross-source match.
+[ADR-0003](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md) accepts K-APT source ID plus legal-dong, address, and normalized-name values as initial evidence. [ADR-0009](../../docs/decisions/ADR-0009-explicit-transaction-name-aliases.md) adds only explicit source-ID-scoped transaction-name aliases, still requiring exact address evidence. Only an explicitly selected single candidate receives a project identity; sparse or ambiguous evidence never becomes an automatic cross-source match.
 
 An identity error has a larger blast radius than an ordinary parsing error: it can merge transactions from different complexes, fragment one complex, attach the wrong household denominator, and invalidate comparisons while still producing plausible metrics.
 
@@ -38,11 +38,13 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 - [R-001: Apartment search](../../docs/requirements/R-001-apartment-search.md)
 - [R-002: Sale transaction retrieval](../../docs/requirements/R-002-transaction-retrieval.md)
 - [R-016: Apartment comparison](../../docs/requirements/R-016-apartment-comparison.md)
+- [R-023: Saved apartment interests](../../docs/requirements/R-023-saved-apartment-interests.md)
 
 ## Decisions and open questions
 
 - [OQ-001: Stable apartment identity](../../docs/open-questions.md#oq-001-stable-apartment-identity)
 - ADR-0003 resolves OQ-001 for the initial version; renamed-complex continuity remains a limitation.
+- [ADR-0009](../../docs/decisions/ADR-0009-explicit-transaction-name-aliases.md) governs the narrow verified alias exception and conservative unmapped-component failure.
 
 ## Evidence and interpretation risks
 
@@ -62,3 +64,4 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 - [Transaction quality](../data/transaction-quality.md)
 - [Analysis context](analysis-context.md)
 - [Open decision map](../project/open-decision-map.md)
+- [Saved apartment interests](../project/saved-apartment-interests.md)

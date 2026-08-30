@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from apt_analyzer.analytics import HouseholdEvidence
+from apt_analyzer.apartment_data import ApartmentCandidate
 from apt_analyzer.comparison import CommonAnalysisConfig, compare
 from apt_analyzer.domain import (
     AnalysisPeriod,
@@ -12,6 +13,38 @@ from apt_analyzer.domain import (
     TransactionType,
 )
 from apt_analyzer.persistence import SQLiteStore
+
+
+def test_saved_interest_round_trip_is_idempotent_and_migrates_v4(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "interests.db"
+    store = SQLiteStore(path)
+    store.close()
+    with sqlite3.connect(path) as connection:
+        connection.execute("UPDATE schema_version SET version=4")
+        connection.execute("DROP TABLE saved_interests")
+
+    store = SQLiteStore(path)
+    apartment = Apartment("apt-1", "Example")
+    candidate = ApartmentCandidate("kapt-1", "Example", "1234567890", "lot", "road")
+
+    store.save_interest(candidate, apartment, region_code="11")
+    store.save_interest(candidate, apartment, region_code="11")
+    assert store.schema_version == 5
+    assert [(item.candidate, item.apartment) for item in store.list_interests()] == [
+        (candidate, apartment)
+    ]
+    store.close()
+
+    reopened = SQLiteStore(path)
+    assert reopened.schema_version == 5
+    assert [(item.candidate, item.apartment) for item in reopened.list_interests()] == [
+        (candidate, apartment)
+    ]
+    assert reopened.remove_interest(apartment.internal_id) is True
+    assert reopened.list_interests() == ()
+    assert reopened.load_transactions(apartment.internal_id) == ()
 
 
 def test_legacy_v1_database_migrates_and_preserves_transaction(tmp_path):
@@ -34,7 +67,7 @@ def test_legacy_v1_database_migrates_and_preserves_transaction(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 4
+    assert store.schema_version == 5
     assert store.load_transactions("apt-1") == (
         NormalizedTransaction(
             "apt-1",
@@ -109,7 +142,7 @@ def test_legacy_exact_duplicates_collapse_during_atomic_migration(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 4
+    assert store.schema_version == 5
     assert len(store.load_transactions("apt-1")) == 1
 
 
@@ -119,7 +152,7 @@ def test_invalid_schema_version_and_mismatched_month_are_failures(tmp_path):
     path = tmp_path / "future.db"
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
-        connection.execute("INSERT INTO schema_version VALUES (5)")
+        connection.execute("INSERT INTO schema_version VALUES (6)")
     import pytest
 
     with pytest.raises(ValueError, match="unsupported schema version"):
@@ -180,7 +213,7 @@ def test_schema_v3_database_migrates_to_v4_and_preserves_evidence(tmp_path):
 
     store = SQLiteStore(path)
 
-    assert store.schema_version == 4
+    assert store.schema_version == 5
     assert len(store.load_transactions("apt-1")) == 1
     assert store.api_usage_snapshot("2026-08-28", ("list", "detail", "trade")) == {
         "list": 0,

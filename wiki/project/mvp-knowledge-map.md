@@ -64,6 +64,8 @@ redefining the liquidity core.
 - Is constrained by unresolved dependencies in the [Open decision map](open-decision-map.md).
 - Is presented through the accepted [local browser workspace requirement](../../docs/requirements/R-020-local-browser-analysis-workspace.md)
   and [local-web stack decision](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
+- Has a preference-only extension in [Saved apartment interests](saved-apartment-interests.md)
+  governed by [R-023](../../docs/requirements/R-023-saved-apartment-interests.md).
 - Uses the [local runtime configuration](local-runtime-configuration.md) invariant for server-side credentials.
 - Extends into [Regional ingestion and screening](regional-ingestion-and-screening.md)
   without an implicit nationwide transaction preload.
@@ -72,7 +74,7 @@ redefining the liquidity core.
 
 ## Requirements
 
-- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-022.
+- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-023.
 - The end-to-end comparison outcome is defined by [R-016](../../docs/requirements/R-016-apartment-comparison.md).
 - Reproducibility across the flow is defined by [R-019](../../docs/requirements/R-019-analysis-context.md).
 - The productized browser and persisted screening outcome is defined by [R-022](../../docs/requirements/R-022-local-productized-screening.md).
@@ -108,3 +110,4 @@ and covered by [`test_m6.py`](../../tests/test_m6.py).
 - [Local runtime configuration](local-runtime-configuration.md)
 - [Regional ingestion and screening](regional-ingestion-and-screening.md)
 - [Regional relative analysis](regional-relative-analysis.md)
+- [Saved apartment interests](saved-apartment-interests.md)

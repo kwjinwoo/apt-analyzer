@@ -19,6 +19,52 @@
                 <p>아파트를 직접 선택하고 거래 근거를 갱신한 뒤, 같은 분석 조건으로 지표를 비교합니다. 결과는 화면과 JSON으로 함께 확인할 수 있습니다.</p>
             </header>
             <p class="state badge" data-state="{{ workspace.status }}">현재 상태: {{ labels.get(workspace.status,workspace.status) }}</p>
+            <section aria-labelledby="saved-interests-title">
+                <p class="step">관심 단지</p>
+                <h2 id="saved-interests-title">저장한 관심 단지</h2>
+                {% if interests %}
+                    <div class="table-wrap">
+                        <table>
+                            <caption>저장한 관심 단지 목록</caption>
+                            <tr>
+                                <th>단지명</th>
+                                <th>주소</th>
+                                <th>작업</th>
+                            </tr>
+                            {% for interest in interests %}
+                                <tr>
+                                    <td>{{ interest.apartment.display_name }}</td>
+                                    <td>{{ interest.candidate.road_address or interest.candidate.lot_address }}</td>
+                                    <td>
+                                        <form method="post"
+                                              action="/interests/select"
+                                              hx-post="/interests/select"
+                                              hx-target="#workspace"
+                                              hx-swap="outerHTML">
+                                            <button type="submit"
+                                                    name="apartment_id"
+                                                    value="{{ interest.apartment.internal_id }}"
+                                                    class="secondary">분석 대상으로 선택</button>
+                                        </form>
+                                        <form method="post"
+                                              action="/interests/remove"
+                                              hx-post="/interests/remove"
+                                              hx-target="#workspace"
+                                              hx-swap="outerHTML">
+                                            <button type="submit"
+                                                    name="apartment_id"
+                                                    value="{{ interest.apartment.internal_id }}"
+                                                    class="secondary">관심 해제</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="help">저장한 관심 단지가 없습니다.</p>
+                {% endif %}
+            </section>
             <section class="api-usage" aria-labelledby="api-usage-title">
                 <div class="section-heading">
                     <div>
@@ -120,6 +166,13 @@
                     <p class="step">2단계</p>
                     <h2>근거 데이터 갱신</h2>
                     <p class="selected">선택한 단지: <strong>{{ workspace.apartment.display_name }}</strong> ({{ workspace.apartment.internal_id }})</p>
+                    <form method="post"
+                          action="/interests/save"
+                          hx-post="/interests/save"
+                          hx-target="#workspace"
+                          hx-swap="outerHTML">
+                        <button type="submit" class="secondary">관심 단지로 저장</button>
+                    </form>
                     <form method="post"
                           action="/update"
                           hx-post="/update"
