@@ -66,6 +66,8 @@ redefining the liquidity core.
   and [local-web stack decision](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
 - Has a preference-only extension in [Saved apartment interests](saved-apartment-interests.md)
   governed by [R-023](../../docs/requirements/R-023-saved-apartment-interests.md).
+- Has an accepted period-driven extension in [Period-driven analysis](period-driven-analysis.md)
+  governed by [R-024](../../docs/requirements/R-024-period-driven-analysis.md) and [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md).
 - Uses the [local runtime configuration](local-runtime-configuration.md) invariant for server-side credentials.
 - Extends into [Regional ingestion and screening](regional-ingestion-and-screening.md)
   without an implicit nationwide transaction preload.
@@ -74,7 +76,7 @@ redefining the liquidity core.
 
 ## Requirements
 
-- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-023.
+- See the [Requirement map](requirement-map.md) for the complete relationship among R-001 through R-024.
 - The end-to-end comparison outcome is defined by [R-016](../../docs/requirements/R-016-apartment-comparison.md).
 - Reproducibility across the flow is defined by [R-019](../../docs/requirements/R-019-analysis-context.md).
 - The productized browser and persisted screening outcome is defined by [R-022](../../docs/requirements/R-022-local-productized-screening.md).
@@ -111,3 +113,4 @@ and covered by [`test_m6.py`](../../tests/test_m6.py).
 - [Regional ingestion and screening](regional-ingestion-and-screening.md)
 - [Regional relative analysis](regional-relative-analysis.md)
 - [Saved apartment interests](saved-apartment-interests.md)
+- [Period-driven analysis](period-driven-analysis.md)

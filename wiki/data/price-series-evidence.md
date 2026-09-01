@@ -3,7 +3,7 @@ title: Price-Series Evidence
 type: data
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-30
 aliases:
   - Monthly price evidence
   - Sparse price series
@@ -26,6 +26,10 @@ The sequence is indexed by observed months, while elapsed calendar time still ma
 
 Area composition, floor, building, transaction type, cancellations, and unusual records can change the monthly population. A continuous chart line can visually overstate evidence unless gaps and observation strength remain visible.
 
+The accepted period-driven contract keeps monthly median observations within
+the overall interval and permits partial boundary months to be labeled without
+including them in automatic rolling windows. It does not authorize interpolation.
+
 ## Graph connections
 
 - Is built from [Transaction population](transaction-population.md).
@@ -41,6 +45,7 @@ Area composition, floor, building, transaction type, cancellations, and unusual 
 - [R-011: Maximum drawdown](../../docs/requirements/R-011-maximum-drawdown.md)
 - [R-012: Maximum-drawdown interval](../../docs/requirements/R-012-mdd-interval.md)
 - [R-014: Price visualization](../../docs/requirements/R-014-price-visualization.md)
+- [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
 
 ## Decisions and open questions
 

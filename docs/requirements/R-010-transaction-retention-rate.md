@@ -4,12 +4,12 @@ title: Transaction retention rate
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-30
 origin: "Initial requirements R9"
 supersedes: []
 superseded_by: null
 related_requirements: [R-003, R-006, R-017, R-019]
-related_decisions: []
+related_decisions: [ADR-0010]
 ---
 
 # R-010: Transaction retention rate
@@ -29,14 +29,18 @@ The user can select a baseline period and comparison period and obtain the compa
 - **AC-3:** Both periods use the same apartment, area selection, and inclusion policy.
 - **AC-4:** The result exposes both periods and annualized counts.
 - **AC-5:** A zero baseline is represented without returning a misleading ordinary percentage.
+- **AC-6:** Human presentation identifies retention as a percentage (`%`) while
+  machine results retain the exact ratio and its comparison meaning.
 
 ## Constraints
 
 - Retention is relative to the selected periods and must not be presented as an intrinsic, context-free property.
+- The default period relationship and completed-month eligibility follow [ADR-0010](../decisions/ADR-0010-completed-month-rolling-analysis.md); arbitrary partial-year annualization remains unresolved.
 
 ## Non-goals
 
-- Automatically choosing or labeling market-cycle periods.
+- Automatically classifying or labeling market-cycle periods; deterministic
+  completed-month default selection follows [ADR-0010](../decisions/ADR-0010-completed-month-rolling-analysis.md).
 
 ## Verification
 
@@ -50,7 +54,9 @@ None.
 
 ### Verification gaps
 
-- AC-1 through AC-5 have no implementation evidence yet.
+- Single-apartment completed-month retention is exercised through the R-024
+  web and rolling-period tests; comparison/screening retain their legacy
+  calendar-year behavior.
 
 ## Open questions
 

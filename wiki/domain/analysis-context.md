@@ -3,7 +3,7 @@ title: Analysis Context
 type: domain
 role: topic
 status: active
-updated: 2026-08-23
+updated: 2026-08-31
 aliases:
   - Metric context
   - Analysis configuration
@@ -26,6 +26,10 @@ Context must travel with a result rather than depending on session state or inte
 
 The context establishes reproducibility but does not make incompatible evidence comparable. For example, sharing the label `84㎡` does not prove equivalent area groups, and using the same MDD formula does not remove differences in price-series sparsity.
 
+Single-apartment human results separate an always-visible comparable core-metric summary from a collapsed but inspectable reproducibility table, while machine JSON retains equivalent context.
+
+[R-024](../../docs/requirements/R-024-period-driven-analysis.md) and [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) add accepted period-driven defaults: an explicit overall interval, visible completed-month derivation methods, and explicit overrides. The rolling anchor is chosen by calendar containment; required turnover/retention spans are consecutive and cannot skip months with missing or failed coverage. Overrides remain subject to metric validity rules and may be unavailable. The defaults do not resolve arbitrary partial-year annualization.
+
 ## Graph connections
 
 - Identifies the subject through [Apartment identity](apartment-identity.md).
@@ -41,12 +45,13 @@ The context establishes reproducibility but does not make incompatible evidence 
 - [R-006: Area-filtered analysis](../../docs/requirements/R-006-area-filter.md)
 - [R-016: Apartment comparison](../../docs/requirements/R-016-apartment-comparison.md)
 - [R-019: Visible analysis context](../../docs/requirements/R-019-analysis-context.md)
+- [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
 
 ## Decisions and open questions
 
-- [OQ-004: Partial-year annualization](../../docs/open-questions.md#oq-004-partial-year-annualization)
 - [OQ-006: Default direct-transaction policy](../../docs/open-questions.md#oq-006-default-direct-transaction-policy)
 - [OQ-008: Area-filtered turnover presentation](../../docs/open-questions.md#oq-008-area-filtered-turnover-presentation)
+- [OQ-004: Partial-year annualization](../../docs/open-questions.md#oq-004-partial-year-annualization)
 
 ## Evidence and interpretation risks
 

@@ -4,7 +4,7 @@ title: Maximum drawdown
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-31
 origin: "Initial requirements R10"
 supersedes: []
 superseded_by: null
@@ -29,6 +29,8 @@ The system calculates maximum drawdown over a selected price series, using month
 - **AC-3:** Drawdown is measured from a preceding peak to a later trough.
 - **AC-4:** The result exposes the MDD value and price-series method.
 - **AC-5:** Insufficient evidence returns an explicit unavailable or qualified result rather than an invented value.
+- **AC-6:** Human presentation identifies MDD as a percentage (`%`) while
+  machine results retain the exact signed ratio.
 
 ## Constraints
 

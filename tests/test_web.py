@@ -28,6 +28,7 @@ from apt_analyzer.web import (
 class FakeSearch:
     def __init__(self) -> None:
         self.apartments = {"a": Apartment("a", "Alpha"), "b": Apartment("b", "Beta")}
+        self.retrieve_calls = 0
 
     def search(self, name: str, *, sido_code: str = "11") -> tuple[ApartmentCandidate, ...]:
         return tuple(
@@ -51,6 +52,7 @@ class FakeSearch:
     def retrieve(
         self, candidate: ApartmentCandidate, apartment: Apartment, period: object
     ) -> tuple[NormalizedTransaction, ...]:
+        self.retrieve_calls += 1
         return (
             NormalizedTransaction(
                 apartment.internal_id,
@@ -63,6 +65,62 @@ class FakeSearch:
                 source_record_id="day-15",
             ),
         )
+
+
+class HouseholdSearch(FakeSearch):
+    def __init__(self, household_count: int = 1842) -> None:
+        super().__init__()
+        self.household_count = household_count
+        self.resolve_calls = 0
+        self.fail = False
+
+    def resolve(
+        self, selected: ApartmentCandidate
+    ) -> tuple[ApartmentCandidate, IdentityResolution]:
+        self.resolve_calls += 1
+        if self.fail:
+            raise RuntimeError("fixture K-APT failure")
+        enriched = ApartmentCandidate(
+            selected.source_id,
+            selected.name,
+            selected.legal_dong_code,
+            selected.lot_address,
+            selected.road_address,
+            self.household_count,
+            "K-APT apartment basic information",
+        )
+        apartment = self.apartments[selected.source_id]
+        return enriched, IdentityResolution(ResolutionStatus.RESOLVED, (enriched,), apartment)
+
+
+def _save_two_year_metric_evidence(store: SQLiteStore, apartment: Apartment) -> None:
+    source_name = "MOLIT apartment sale transactions"
+
+    def records(month: str) -> tuple[NormalizedTransaction, ...]:
+        year = int(month[:4])
+        month_number = int(month[4:])
+        count = 1 if year == 2023 else 2
+        price = 50_000_000 if month == "202402" else 100_000_000
+        return tuple(
+            NormalizedTransaction(
+                apartment.internal_id,
+                date(year, month_number, 15 + index),
+                price,
+                Decimal("84"),
+                TransactionType.BROKERED,
+                False,
+                source_name=source_name,
+                source_record_id=f"{month}-{index}",
+            )
+            for index in range(count)
+        )
+
+    store.update_incremental(
+        apartment,
+        AnalysisPeriod(date(2023, 1, 1), date(2024, 12, 31)),
+        records,
+        source_name=source_name,
+    )
 
 
 def test_interest_routes_persist_idempotently_and_restore_without_comparison_membership(tmp_path):
@@ -87,6 +145,166 @@ def test_interest_routes_persist_idempotently_and_restore_without_comparison_mem
     assert "선택한 단지: <strong>Alpha</strong>" in selected.text
     assert restarted.state.workspace.apartment == Apartment("a", "Alpha")
     assert restarted.state.workspace.apartments == {}
+
+
+def test_selected_kapt_households_are_persisted_and_used_offline_for_percent_metrics(
+    tmp_path,
+) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(
+            search_service=service,
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+
+    selected = client.post("/select", data={"source_id": "a"})
+
+    assert selected.status_code == 200
+    evidence = store.load_household_evidence("a")
+    assert evidence is not None and evidence.count == 100
+    assert 'action="/household/refresh"' in selected.text
+    assert service.resolve_calls == 1
+
+    analyzed = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "transaction_types": ["brokered"],
+        },
+    )
+    reanalyzed = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "transaction_types": ["brokered"],
+        },
+    )
+
+    assert analyzed.status_code == reanalyzed.status_code == 200
+    assert service.resolve_calls == 1
+    assert service.retrieve_calls == 0
+    assert "24.00%" in analyzed.text
+    assert 'aria-label="핵심 분석 지표"' in analyzed.text
+    assert "24건 / 100세대" in analyzed.text
+    assert "24건 / 12건" in analyzed.text
+    assert "100,000,000원 → 50,000,000원" in analyzed.text
+    assert "200.00%" in analyzed.text
+    assert "-50.00%" in analyzed.text
+    assert "100%는 동일" in analyzed.text
+    payload = client.get("/export?kind=analysis").json()
+    assert payload["turnover"]["value"] == "0.24"
+    assert payload["retention"]["value"] == "2"
+    assert payload["mdd"]["value"] == "-0.5"
+    assert payload["metric_display"] == {
+        "turnover": {"unit": "%", "meaning": "기간 내 유효 거래량 ÷ 세대수"},
+        "retention": {"unit": "%", "meaning": "비교 기간 거래량 ÷ 기준 기간 거래량"},
+        "mdd": {"unit": "%", "meaning": "가격 시계열 최대낙폭"},
+    }
+
+
+def test_explicit_household_refresh_preserves_last_good_evidence_on_failure(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    client = TestClient(create_app(search_service=service, store=store))
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    service.household_count = 120
+
+    refreshed = client.post("/household/refresh")
+
+    assert refreshed.status_code == 200
+    evidence = store.load_household_evidence("a")
+    assert evidence is not None and evidence.count == 120
+    service.fail = True
+    failed = client.post("/household/refresh")
+    preserved = store.load_household_evidence("a")
+    assert failed.status_code == 200
+    assert "fixture K-APT failure" in failed.text
+    assert preserved is not None and preserved.count == 120
+
+
+def test_persisted_complex_households_do_not_leak_into_area_group_turnover(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(
+            search_service=service,
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+
+    automatic = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-84",
+            "transaction_types": ["brokered"],
+        },
+    )
+    automatic_payload = client.get("/export?kind=analysis").json()
+    assert automatic.status_code == 200
+    assert "선택한 면적 그룹의 세대수 근거가 필요합니다." in automatic.text
+    assert "분석 전 K-APT 세대수 근거를 갱신해 주세요." not in automatic.text
+    assert automatic_payload["turnover"]["value"] is None
+    assert automatic_payload["turnover"]["unavailable"]["reason"] == (
+        "household denominator is missing or invalid"
+    )
+
+    explicit = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-84",
+            "transaction_types": ["brokered"],
+            "household_count": "100",
+            "household_scope": "floor-84",
+            "household_source": "fixture area evidence",
+        },
+    )
+    explicit_payload = client.get("/export?kind=analysis").json()
+    assert explicit.status_code == 200
+    assert explicit_payload["turnover"]["value"] == "0.24"
+    assert service.resolve_calls == 1
+    assert service.retrieve_calls == 0
+
+
+def test_missing_complex_household_shows_refresh_guidance_and_machine_reason(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(
+            search_service=FakeSearch(),
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post(
+        "/analysis",
+        data={"start": "2023-01-01", "end": "2024-12-31", "transaction_types": ["brokered"]},
+    )
+    payload = client.get("/export?kind=analysis").json()
+    assert response.status_code == 200
+    assert "계산 불가: 세대수 분모가 없거나 올바르지 않습니다" in response.text
+    assert "분석 전 K-APT 세대수 근거를 갱신해 주세요." in response.text
+    assert payload["turnover"]["value"] is None
+    assert payload["turnover"]["unavailable"]["reason"] == (
+        "household denominator is missing or invalid"
+    )
 
 
 def test_saving_current_selection_keeps_the_selection_region_after_a_later_search(tmp_path):
@@ -750,15 +968,18 @@ def test_analysis_renders_korean_reproducible_context() -> None:
         },
     )
     assert response.status_code == 200
+    assert 'aria-label="핵심 분석 지표"' in response.text
+    for header in ("지표", "결과", "계산 근거", "적용 기간", "해석"):
+        assert header in response.text
+    assert "분석 조건 자세히 보기" in response.text
+    assert "· 지표: 거래회전율" not in response.text
+    assert "계산 불가: 거래회전율은 완전한 연속 12개월이 필요합니다" in response.text
+    assert "계산 불가: 거래유지율은 인접한 12개월 구간 두 개가 필요합니다" in response.text
+    assert "계산 불가: 관측된 월이 두 개 미만입니다" in response.text
     for text in (
-        "분석 조건과 지표",
         "Alpha",
         "면적",
         "거래 포함 정책",
-        "회전율 기간",
-        "기준 기간",
-        "비교 기간",
-        "MDD 기간",
         "거래회전율",
         "거래유지율",
         "최대낙폭(MDD)",
@@ -768,6 +989,198 @@ def test_analysis_renders_korean_reproducible_context() -> None:
     ):
         assert text in response.text
     assert ">turnover_start<" not in response.text
+
+
+def test_single_analysis_centers_overall_period_and_result_editor() -> None:
+    client = TestClient(create_app(search_service=FakeSearch(), store=SQLiteStore(":memory:")))
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    selected = client.post("/select", data={"source_id": "a"})
+    assert selected.status_code == 200
+    assert 'name="start"' in selected.text and 'name="end"' in selected.text
+    assert "고급 분석 설정" in selected.text
+
+    client.post("/update", data={"start": "2024-01-01", "end": "2024-01-01"})
+    result = client.post("/analysis", data={"start": "2024-01-01", "end": "2024-01-01"})
+    assert 'id="analysis-result-editor"' in result.text
+    assert 'hx-post="/analysis"' in result.text
+
+
+def test_analysis_keeps_monthly_gap_without_retrieval() -> None:
+    service = FakeSearch()
+    client = TestClient(create_app(search_service=service, store=SQLiteStore(":memory:")))
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post("/update", data={"start": "2024-01-01", "end": "2024-01-31"})
+    response = client.post("/analysis", data={"start": "2024-01-01", "end": "2024-02-29"})
+    assert response.status_code == 200
+    assert "2024-01" in response.text and "2024-02" in response.text
+    assert "누락됨" in response.text
+    payload = client.get("/export?kind=analysis").json()
+    missing_price = next(item for item in payload["monthly_series"] if item["period"] == "2024-02")
+    missing_volume = next(item for item in payload["volume_series"] if item["period"] == "2024-02")
+    assert missing_price["transaction_count"] is None
+    assert missing_volume["value"] is None
+    assert payload["coverage"]["202402"] == "missing"
+
+
+def test_analysis_marks_current_month_incomplete_with_injected_today() -> None:
+    client = TestClient(
+        create_app(
+            search_service=FakeSearch(),
+            store=SQLiteStore(":memory:"),
+            analysis_today=lambda: date(2026, 8, 30),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post("/analysis", data={"start": "2026-08-01", "end": "2026-08-30"})
+    assert response.status_code == 200
+    assert "불완전" in response.text
+
+
+def test_result_editor_round_trips_advanced_context_and_overrides() -> None:
+    service = FakeSearch()
+    client = TestClient(create_app(search_service=service, store=SQLiteStore(":memory:")))
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post("/update", data={"start": "2024-01-01", "end": "2024-01-31"})
+    response = client.post(
+        "/analysis",
+        data={
+            "start": "2024-01-01",
+            "end": "2024-01-31",
+            "area_group": "floor-84",
+            "include_cancelled": "true",
+            "transaction_types": ["brokered"],
+            "household_count": "100",
+            "household_scope": "floor-84",
+            "household_source": "fixture",
+            "turnover_start": "2024-01-01",
+            "turnover_end": "2024-01-31",
+            "mdd_start": "2024-01-01",
+            "mdd_end": "2024-01-31",
+        },
+    )
+    assert response.status_code == 200
+    retrieve_calls_after_update = service.retrieve_calls
+    editor_html = response.text.split('id="analysis-result-editor"', 1)[1].split("</form>", 1)[0]
+    assert re.search(r'<option value="floor-84"\s+selected>', editor_html)
+    assert re.search(r'name="transaction_types"\s+value="brokered"\s+checked', editor_html)
+    assert not re.search(r'name="transaction_types"\s+value="direct"\s+checked', editor_html)
+    assert re.search(r'name="include_cancelled"\s+checked', editor_html)
+    assert 'value="2024-01-01"' in editor_html
+    payload = client.get("/export?kind=analysis").json()
+    assert payload["ui_context"]["area_group_key"] == "floor-84"
+    assert payload["ui_context"]["metric_period_overrides"]["turnover_start"] == "2024-01-01"
+    assert payload["ui_context"]["metric_period_sources"]["mdd"] == "override"
+    assert payload["ui_context"]["household"]["count"] == 100
+    assert payload["ui_context"]["inclusion_policy"]["transaction_types"] == ["brokered"]
+
+    reanalyzed = client.post(
+        "/analysis",
+        data={
+            "start": "2024-01-01",
+            "end": "2024-01-31",
+            "area_group": "floor-84",
+            "include_cancelled": "true",
+            "transaction_types": ["brokered"],
+            "household_count": "100",
+            "household_scope": "floor-84",
+            "household_source": "fixture",
+            "turnover_start": "2024-01-01",
+            "turnover_end": "2024-01-31",
+            "mdd_start": "2024-01-01",
+            "mdd_end": "2024-01-31",
+        },
+    )
+    assert reanalyzed.status_code == 200
+    assert service.retrieve_calls == retrieve_calls_after_update
+    assert client.get("/export?kind=analysis").json()["ui_context"]["area_group_key"] == "floor-84"
+
+
+def test_rolling_export_uses_fixed_completed_months_and_keeps_partial_month_evidence() -> None:
+    service = FakeSearch()
+    store = SQLiteStore(":memory:")
+    apartment = Apartment("a", "Alpha")
+    source_name = "MOLIT apartment sale transactions"
+
+    def transaction_for_month(month: str) -> tuple[NormalizedTransaction, ...]:
+        return (
+            NormalizedTransaction(
+                apartment.internal_id,
+                date(int(month[:4]), int(month[4:]), 15),
+                100_000_000 + int(month),
+                Decimal("84"),
+                TransactionType.BROKERED,
+                False,
+                source_name=source_name,
+                source_record_id=f"rolling-{month}",
+            ),
+        )
+
+    store.update_incremental(
+        apartment,
+        AnalysisPeriod(date(2024, 8, 1), date(2026, 8, 31)),
+        transaction_for_month,
+        source_name=source_name,
+    )
+    client = TestClient(
+        create_app(
+            search_service=service,
+            store=store,
+            analysis_today=lambda: date(2026, 8, 30),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post(
+        "/analysis",
+        data={
+            "start": "2024-08-01",
+            "end": "2026-08-30",
+            "transaction_types": ["brokered"],
+            "household_count": "100",
+            "household_scope": "complex",
+            "household_source": "fixture",
+        },
+    )
+    assert response.status_code == 200
+    assert service.retrieve_calls == 0
+    payload = client.get("/export?kind=analysis").json()
+    assert payload["ui_context"]["metric_periods"] == {
+        "turnover": {"start": "2025-08-01", "end": "2026-07-31"},
+        "baseline": {"start": "2024-08-01", "end": "2025-07-31"},
+        "comparison": {"start": "2025-08-01", "end": "2026-07-31"},
+        "mdd": {"start": "2024-08-01", "end": "2026-08-30"},
+    }
+    assert payload["ui_context"]["metric_period_sources"] == {
+        "turnover": "automatic",
+        "retention": "automatic",
+        "mdd": "overall",
+    }
+    assert payload["ui_context"]["rolling_anchor"] == "2026-07"
+    assert payload["ui_context"]["metric_methods"] == {
+        "turnover": "completed-calendar-month-12-month-window",
+        "retention": "completed-calendar-month-12-vs-prior-12",
+        "mdd": "observed monthly median",
+    }
+    assert payload["turnover"]["annualization_method"] == (
+        "completed-calendar-month-12-month-window"
+    )
+    assert payload["retention"]["annualization_method"] == (
+        "completed-calendar-month-12-vs-prior-12"
+    )
+    august_price = next(item for item in payload["monthly_series"] if item["period"] == "2026-08")
+    august_volume = next(item for item in payload["volume_series"] if item["period"] == "2026-08")
+    august_trend = next(item for item in payload["trend_series"] if item["period"] == "2026-08")
+    assert august_price["value"] is not None
+    assert august_volume["value"] == 1
+    assert august_price["coverage_status"] == august_volume["coverage_status"] == "fresh"
+    assert august_price["period_status"] == august_volume["period_status"] == "incomplete"
+    assert august_trend["value"] is None and august_trend["period_status"] == "incomplete"
+    assert payload["data_status"] != "coverage-limited"
+    assert payload["coverage"]["202608"] == "fresh"
+    assert payload["observations"]["202608"] == "observed"
 
 
 def test_screening_structured_controls_cover_supported_metrics_and_infer_units() -> None:
@@ -826,7 +1239,8 @@ def test_screening_structured_submission_preserves_inferred_machine_contract() -
 
 
 def test_all_valid_empty_months_are_analyzable_zero_volume_and_null_price() -> None:
-    app = create_app(search_service=EmptySearch(), store=SQLiteStore(":memory:"))
+    store = SQLiteStore(":memory:")
+    app = create_app(search_service=EmptySearch(), store=store)
     client = TestClient(app)
     client.post("/search", data={"name": "Alpha", "sido_code": "11"})
     client.post(
@@ -845,6 +1259,12 @@ def test_all_valid_empty_months_are_analyzable_zero_volume_and_null_price() -> N
     assert "데이터 상태: 유효한 빈 결과" in response.text
     assert "2024-01" in response.text and ">0<" in response.text
     assert "사용 불가" in response.text
+
+    restarted = TestClient(create_app(search_service=EmptySearch(), store=store))
+    restarted.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    restarted.post("/select", data={"source_id": "a"})
+    restarted.post("/analysis", data={"start": "2024-01-01", "end": "2024-01-31"})
+    assert restarted.get("/export?kind=analysis").json()["coverage"]["202401"] == "valid_empty"
 
 
 def test_comparison_gates_subject_with_missing_coverage() -> None:

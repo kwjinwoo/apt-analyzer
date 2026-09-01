@@ -1,13 +1,16 @@
 """Pure, deterministic analytics over normalized apartment transactions."""
 
+import calendar
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_FLOOR, Decimal
 
 from apt_analyzer.domain import AnalysisContext, AnalysisPeriod, AreaGroup, NormalizedTransaction
 
 ANNUALIZATION_METHOD = "complete-calendar-year-average"
+ROLLING_TURNOVER_METHOD = "completed-calendar-month-12-month-window"
+ROLLING_RETENTION_METHOD = "completed-calendar-month-12-vs-prior-12"
 PRICE_SERIES_METHOD = "observed monthly median"
 MISSING_MONTH_METHOD = "observed months only; no interpolation"
 
@@ -49,6 +52,16 @@ class MonthlyPriceObservation:
     month: str
     median_krw: Decimal
     transaction_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class MonthlyTransactionTrend:
+    """One monthly count and its consecutive three-month supporting mean."""
+
+    month: str
+    transaction_count: int | None
+    trailing_three_month_mean: Decimal | None
+    status: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +148,234 @@ class AnalysisResult:
     area_grouping_policy: str
     area_discovery_period: AnalysisPeriod
     data_status: str
+
+
+@dataclass(frozen=True, slots=True)
+class CompletedMonthPeriods:
+    """Calendar-contained rolling periods derived from one overall interval."""
+
+    anchor: str | None
+    turnover: AnalysisPeriod | None
+    baseline: AnalysisPeriod | None
+
+
+def derive_completed_month_periods(
+    overall: AnalysisPeriod, *, today: date
+) -> CompletedMonthPeriods:
+    """Derive completed-month rolling periods without using coverage to shift them."""
+    cursor = date(overall.end.year, overall.end.month, 1)
+    anchor: tuple[date, date] | None = None
+    while cursor >= date(overall.start.year, overall.start.month, 1):
+        month_end = date(
+            cursor.year, cursor.month, calendar.monthrange(cursor.year, cursor.month)[1]
+        )
+        if month_end < today and cursor >= overall.start and month_end <= overall.end:
+            anchor = (cursor, month_end)
+            break
+        cursor = date(
+            cursor.year - (cursor.month == 1), 12 if cursor.month == 1 else cursor.month - 1, 1
+        )
+    if anchor is None:
+        return CompletedMonthPeriods(None, None, None)
+    anchor_start, anchor_end = anchor
+    turnover_start = _shift_month(anchor_start, -11)
+    turnover = AnalysisPeriod(turnover_start, anchor_end)
+    baseline_start = _shift_month(turnover_start, -12)
+    baseline_end = turnover_start - timedelta(days=1)
+    baseline = AnalysisPeriod(baseline_start, baseline_end)
+    if baseline.start < overall.start:
+        baseline = None
+    if turnover.start < overall.start:
+        turnover = None
+    return CompletedMonthPeriods(anchor_start.strftime("%Y-%m"), turnover, baseline)
+
+
+def monthly_transaction_trend(
+    population: TransactionPopulation,
+    period: AnalysisPeriod,
+    coverage: dict[str, str],
+    *,
+    today: date | None = None,
+) -> tuple[MonthlyTransactionTrend, ...]:
+    """Return monthly eligible counts and consecutive three-month means."""
+    month_keys = _month_keys(period)
+    counts = {
+        key: sum(1 for item in population.eligible if item.contract_date.strftime("%Y%m") == key)
+        for key in month_keys
+    }
+    usable = {"complete", "fresh", "fetched", "skipped", "valid_empty"}
+    output: list[MonthlyTransactionTrend] = []
+    for index, key in enumerate(month_keys):
+        state = coverage.get(key, "missing")
+        period_state = (
+            "incomplete" if today is not None and _month_end(key) >= today else "complete"
+        )
+        count = counts[key] if state in usable else None
+        mean: Decimal | None = None
+        if (
+            period_state == "complete"
+            and index >= 2
+            and all(
+                coverage.get(item, "missing") in usable
+                for item in month_keys[index - 2 : index + 1]
+            )
+            and (
+                today is None
+                or all(_month_end(item) < today for item in month_keys[index - 2 : index + 1])
+            )
+        ):
+            mean = sum(counts[item] for item in month_keys[index - 2 : index + 1]) / Decimal(3)
+        output.append(MonthlyTransactionTrend(key, count, mean, f"{state}:{period_state}"))
+    return tuple(output)
+
+
+def rolling_turnover(
+    population: TransactionPopulation,
+    period: AnalysisPeriod,
+    household: HouseholdEvidence,
+    coverage: dict[str, str],
+) -> TurnoverResult:
+    """Calculate equal-count completed-month turnover when coverage is contiguous."""
+    count = len(_within(population.eligible, period))
+    if not _is_twelve_calendar_month_period(period):
+        return TurnoverResult(
+            None,
+            None,
+            count,
+            period,
+            household,
+            population.context,
+            ROLLING_TURNOVER_METHOD,
+            MetricUnavailable(
+                "unavailable", "rolling turnover requires exactly 12 complete calendar months"
+            ),
+        )
+    if not _contained_in_context(period, population.context.period):
+        return TurnoverResult(
+            None,
+            None,
+            count,
+            period,
+            household,
+            population.context,
+            ROLLING_TURNOVER_METHOD,
+            MetricUnavailable("unavailable", "metric period is outside overall analysis period"),
+        )
+    if not _usable_span(period, coverage):
+        return TurnoverResult(
+            None,
+            None,
+            count,
+            period,
+            household,
+            population.context,
+            ROLLING_TURNOVER_METHOD,
+            MetricUnavailable("unavailable", "required monthly coverage is incomplete"),
+        )
+    if (
+        household.count is None
+        or household.count <= 0
+        or not household.source
+        or not household.source.strip()
+    ):
+        reason = (
+            "household denominator is missing or invalid"
+            if household.count is None or household.count <= 0
+            else "household source evidence is missing"
+        )
+        return TurnoverResult(
+            None,
+            None,
+            count,
+            period,
+            household,
+            population.context,
+            ROLLING_TURNOVER_METHOD,
+            MetricUnavailable("unavailable", reason),
+        )
+    expected_scope = (
+        "complex"
+        if population.context.area_selection.group is None
+        else population.context.area_selection.group.key
+    )
+    if household.scope != expected_scope:
+        return TurnoverResult(
+            None,
+            None,
+            count,
+            period,
+            household,
+            population.context,
+            ROLLING_TURNOVER_METHOD,
+            MetricUnavailable(
+                "unavailable", "household denominator scope does not match area selection"
+            ),
+        )
+    return TurnoverResult(
+        Decimal(count) / Decimal(household.count),
+        Decimal(count),
+        count,
+        period,
+        household,
+        population.context,
+        ROLLING_TURNOVER_METHOD,
+    )
+
+
+def rolling_retention(
+    population: TransactionPopulation,
+    baseline_period: AnalysisPeriod,
+    comparison_period: AnalysisPeriod,
+    coverage: dict[str, str],
+) -> RetentionResult:
+    """Compare equal 12-month counts when both contiguous spans are usable."""
+    baseline_count = len(_within(population.eligible, baseline_period))
+    comparison_count = len(_within(population.eligible, comparison_period))
+    unavailable = None
+    if (
+        not _is_twelve_calendar_month_period(baseline_period)
+        or not _is_twelve_calendar_month_period(comparison_period)
+        or baseline_period.end + timedelta(days=1) != comparison_period.start
+    ):
+        unavailable = MetricUnavailable(
+            "unavailable", "rolling retention requires adjacent 12-month calendar windows"
+        )
+    elif not _contained_in_context(
+        baseline_period, population.context.period
+    ) or not _contained_in_context(comparison_period, population.context.period):
+        unavailable = MetricUnavailable(
+            "unavailable", "metric period is outside overall analysis period"
+        )
+    elif not _usable_span(baseline_period, coverage) or not _usable_span(
+        comparison_period, coverage
+    ):
+        unavailable = MetricUnavailable("unavailable", "required monthly coverage is incomplete")
+    elif baseline_count == 0:
+        unavailable = MetricUnavailable("unavailable", "baseline transaction count is zero")
+    if unavailable:
+        return RetentionResult(
+            None,
+            baseline_count,
+            comparison_count,
+            Decimal(baseline_count),
+            Decimal(comparison_count),
+            baseline_period,
+            comparison_period,
+            population.context,
+            ROLLING_RETENTION_METHOD,
+            unavailable,
+        )
+    return RetentionResult(
+        Decimal(comparison_count) / Decimal(baseline_count),
+        baseline_count,
+        comparison_count,
+        Decimal(baseline_count),
+        Decimal(comparison_count),
+        baseline_period,
+        comparison_period,
+        population.context,
+        ROLLING_RETENTION_METHOD,
+    )
 
 
 class ExclusiveAreaGroupingPolicy:
@@ -431,6 +672,9 @@ def analyze(
     comparison_period: AnalysisPeriod | None = None,
     mdd_period: AnalysisPeriod | None = None,
     data_status: str = DataCoverageStatus.COMPLETE,
+    rolling_today: date | None = None,
+    monthly_coverage: dict[str, str] | None = None,
+    rolling_defaults: bool = False,
 ) -> AnalysisResult:
     """Compute all M2 metrics from one shared population with established coverage."""
     if data_status not in (DataCoverageStatus.COMPLETE, DataCoverageStatus.VALID_EMPTY):
@@ -450,8 +694,23 @@ def analyze(
     retention_result = None
     if baseline_period is not None and comparison_period is not None:
         retention_result = retention(population, baseline_period, comparison_period)
-    annual_periods = _complete_year_periods(context.period)
     annual_household = household or HouseholdEvidence(None, "complex", None)
+    if rolling_defaults and rolling_today is not None and monthly_coverage is not None:
+        rolling_periods = derive_completed_month_periods(context.period, today=rolling_today)
+        if rolling_periods.turnover is not None and turnover_period == rolling_periods.turnover:
+            turnover_result = rolling_turnover(
+                population, rolling_periods.turnover, annual_household, monthly_coverage
+            )
+        if (
+            rolling_periods.turnover is not None
+            and rolling_periods.baseline is not None
+            and baseline_period == rolling_periods.baseline
+            and comparison_period == rolling_periods.turnover
+        ):
+            retention_result = rolling_retention(
+                population, rolling_periods.baseline, rolling_periods.turnover, monthly_coverage
+            )
+    annual_periods = _complete_year_periods(context.period)
     annual_results = tuple(
         turnover(population, year_period, annual_household) for year_period in annual_periods
     )
@@ -476,6 +735,46 @@ def _is_eligible(transaction: NormalizedTransaction, context: AnalysisContext) -
         and context.period.includes(transaction.contract_date)
         and context.area_selection.includes(transaction.exclusive_area_sqm)
         and context.inclusion_policy.includes(transaction)
+    )
+
+
+def _shift_month(value: date, offset: int) -> date:
+    """Return the first day of the calendar month shifted by ``offset``."""
+    absolute = value.year * 12 + value.month - 1 + offset
+    return date(absolute // 12, absolute % 12 + 1, 1)
+
+
+def _month_keys(period: AnalysisPeriod) -> tuple[str, ...]:
+    """Return every calendar month touched by an inclusive period."""
+    cursor = date(period.start.year, period.start.month, 1)
+    end = date(period.end.year, period.end.month, 1)
+    keys: list[str] = []
+    while cursor <= end:
+        keys.append(cursor.strftime("%Y%m"))
+        cursor = _shift_month(cursor, 1)
+    return tuple(keys)
+
+
+def _month_end(key: str) -> date:
+    """Return the calendar end for a YYYYMM month key."""
+    year, month = int(key[:4]), int(key[4:])
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def _usable_span(period: AnalysisPeriod, coverage: dict[str, str]) -> bool:
+    """Return whether every month in a rolling period has usable evidence."""
+    return all(
+        coverage.get(month) in {"complete", "fresh", "fetched", "skipped", "valid_empty"}
+        for month in _month_keys(period)
+    )
+
+
+def _is_twelve_calendar_month_period(period: AnalysisPeriod) -> bool:
+    """Return whether a period is exactly twelve whole calendar months."""
+    return (
+        period.start.day == 1
+        and period.end.day == calendar.monthrange(period.end.year, period.end.month)[1]
+        and len(_month_keys(period)) == 12
     )
 
 

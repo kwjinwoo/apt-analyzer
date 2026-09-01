@@ -28,6 +28,9 @@ Transaction volume is the count of eligible normalized transactions in the reque
 
 ### Interpretation constraints
 
+Human displays use `%` for turnover, retention, and MDD; machine-readable
+results retain the exact signed or unsigned ratio and its interpretation.
+
 Raw counts are affected by complex size and must not be treated as normalized liquidity. A count is meaningful only with its area selection, date interval, and inclusion policy.
 
 ## Price summary
@@ -61,7 +64,7 @@ annualized eligible transaction count
 applicable household count
 ```
 
-For a multi-year interval, the initial candidate annualization is total eligible transactions divided by the duration expressed in years. The exact treatment of partial years is unresolved.
+For a multi-year interval, the initial candidate annualization is total eligible transactions divided by the duration expressed in years. The exact treatment of arbitrary partial years remains unresolved; [ADR-0010](../decisions/ADR-0010-completed-month-rolling-analysis.md) defines completed-month defaults without resolving that general question.
 
 ### Required context
 
@@ -103,7 +106,27 @@ baseline-period annualized transaction count
 
 ### Interpretation constraints
 
-The result is relative to user-selected periods and is not an intrinsic property of the complex. A zero baseline cannot produce an ordinary percentage and requires an explicit result policy.
+The result is relative to user-selected periods and is not an intrinsic property of the complex. A zero baseline cannot produce an ordinary percentage and requires an explicit result policy. The default completed-month windows and 12/24-month support thresholds are defined by [ADR-0010](../decisions/ADR-0010-completed-month-rolling-analysis.md).
+
+## Completed-month rolling analysis
+
+The period-driven analysis contract uses the latest calendar month whose
+boundaries are wholly contained in the selected overall interval as the anchor,
+without searching backward for usable coverage. Default turnover uses the 12
+consecutive calendar months ending at that anchor, with the entire span wholly
+contained in the overall interval; default retention compares those months with
+the immediately preceding 12 consecutive, non-overlapping months under
+identical population and inclusion semantics, with the full 24-month span
+wholly contained in the interval. Every required month
+must have successful or valid-empty coverage; any missing, failed, or incomplete
+month makes the default unavailable. For each completed chart month, a trailing
+three-month arithmetic mean uses that month and the two immediately preceding
+consecutive completed months, all wholly contained in the interval, as
+supporting time-series evidence only. Partial
+boundary months may be displayed explicitly but are excluded from rolling
+windows; this does not define arbitrary partial-year annualization. Advanced
+overrides remain subject to metric validity rules and may be explicitly
+unavailable.
 
 ## Monthly median price
 

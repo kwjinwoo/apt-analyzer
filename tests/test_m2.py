@@ -9,10 +9,14 @@ from apt_analyzer.analytics import (
     HouseholdEvidence,
     analyze,
     build_population,
+    derive_completed_month_periods,
     discover_area_groups,
     maximum_drawdown,
     monthly_median_prices,
+    monthly_transaction_trend,
     retention,
+    rolling_retention,
+    rolling_turnover,
     turnover,
     yearly_price_summaries,
 )
@@ -60,6 +64,118 @@ def _context(period: AnalysisPeriod) -> AnalysisContext:
         AreaSelection.all(),
         TransactionInclusionPolicy(False, frozenset({TransactionType.BROKERED})),
     )
+
+
+def test_completed_month_periods_use_fixed_today_and_overall_boundaries() -> None:
+    periods = derive_completed_month_periods(
+        AnalysisPeriod(date(2024, 8, 1), date(2026, 8, 30)), today=date(2026, 8, 30)
+    )
+    assert periods.anchor == "2026-07"
+    assert periods.turnover == AnalysisPeriod(date(2025, 8, 1), date(2026, 7, 31))
+    assert periods.baseline == AnalysisPeriod(date(2024, 8, 1), date(2025, 7, 31))
+
+    eleven_months = derive_completed_month_periods(
+        AnalysisPeriod(date(2025, 9, 1), date(2026, 7, 31)), today=date(2026, 8, 30)
+    )
+    twenty_three_months = derive_completed_month_periods(
+        AnalysisPeriod(date(2024, 9, 1), date(2026, 7, 31)), today=date(2026, 8, 30)
+    )
+    assert eleven_months.turnover is None
+    assert twenty_three_months.turnover is not None and twenty_three_months.baseline is None
+
+
+def test_monthly_transaction_trend_preserves_consecutive_gap() -> None:
+    context = _context(AnalysisPeriod(date(2025, 1, 1), date(2025, 3, 31)))
+    population = build_population(
+        [
+            NormalizedTransaction(
+                "apt-1", date(2025, 1, 1), 1, Decimal("84"), TransactionType.BROKERED, False
+            )
+        ],
+        context,
+    )
+    trend = monthly_transaction_trend(
+        population,
+        context.period,
+        {"202501": "valid_empty", "202502": "missing", "202503": "complete"},
+    )
+    assert trend[2].trailing_three_month_mean is None
+
+
+def test_rolling_defaults_use_equal_month_counts_and_coverage() -> None:
+    context = _context(AnalysisPeriod(date(2024, 1, 1), date(2025, 12, 31)))
+    population = build_population([], context)
+    period = AnalysisPeriod(date(2024, 2, 1), date(2025, 1, 31))
+    coverage = {
+        month: "valid_empty"
+        for month in (f"{year:04d}{month:02d}" for year in (2024, 2025) for month in range(1, 13))
+    }
+    result = rolling_turnover(
+        population, period, HouseholdEvidence(100, "complex", "source"), coverage
+    )
+    assert result.value == Decimal(0)
+    retention_result = rolling_retention(
+        population, AnalysisPeriod(date(2024, 1, 1), date(2024, 12, 31)), period, coverage
+    )
+    assert retention_result.value is None
+
+
+def test_rolling_public_calculations_reject_non_calendar_windows() -> None:
+    population = build_population(
+        [], _context(AnalysisPeriod(date(2024, 1, 1), date(2025, 12, 31)))
+    )
+    coverage: dict[str, str] = {}
+    invalid = rolling_turnover(
+        population,
+        AnalysisPeriod(date(2024, 2, 2), date(2025, 1, 31)),
+        HouseholdEvidence(100, "complex", "fixture"),
+        coverage,
+    )
+    assert (
+        invalid.value is None
+        and invalid.annualization_method == "completed-calendar-month-12-month-window"
+    )
+
+
+def test_rolling_defaults_are_independent_of_metric_overrides() -> None:
+    overall = AnalysisPeriod(date(2024, 1, 1), date(2026, 8, 30))
+    coverage = {
+        f"{year:04d}{month:02d}": "valid_empty"
+        for year in (2024, 2025, 2026)
+        for month in range(1, 13)
+    }
+    periods = derive_completed_month_periods(overall, today=date(2026, 8, 30))
+    assert periods.turnover is not None and periods.baseline is not None
+    result = analyze(
+        [],
+        _context(overall),
+        turnover_period=AnalysisPeriod(date(2024, 1, 1), date(2024, 12, 31)),
+        baseline_period=periods.baseline,
+        comparison_period=periods.turnover,
+        rolling_today=date(2026, 8, 30),
+        monthly_coverage=coverage,
+        rolling_defaults=True,
+    )
+    assert result.retention is not None
+    assert result.retention.annualization_method == "completed-calendar-month-12-vs-prior-12"
+
+    retention_override = analyze(
+        [],
+        _context(overall),
+        turnover_period=periods.turnover,
+        baseline_period=AnalysisPeriod(date(2024, 1, 1), date(2024, 12, 31)),
+        comparison_period=AnalysisPeriod(date(2025, 1, 1), date(2025, 12, 31)),
+        rolling_today=date(2026, 8, 30),
+        monthly_coverage=coverage,
+        rolling_defaults=True,
+    )
+    assert retention_override.turnover is not None
+    assert (
+        retention_override.turnover.annualization_method
+        == "completed-calendar-month-12-month-window"
+    )
+    assert retention_override.retention is not None
+    assert retention_override.retention.annualization_method == "complete-calendar-year-average"
 
 
 def test_yearly_and_monthly_results_keep_empty_years_and_observation_counts() -> None:

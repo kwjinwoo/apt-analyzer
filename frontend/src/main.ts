@@ -9,7 +9,7 @@ import {
 import { type ChartSeriesPoint, chartPointsFromResult } from "./chartSeries";
 
 let activePriceChart: Chart<"line"> | undefined;
-let activeVolumeChart: Chart<"bar"> | undefined;
+let activeVolumeChart: Chart<"bar" | "line"> | undefined;
 
 /** Create a chart only when a future server-rendered page supplies a canvas. */
 export function createPriceChart(
@@ -39,9 +39,15 @@ export function hydrateCharts(): void {
         value: item.value,
       }),
     );
+    const trend = (result.trend_series ?? []).map(
+      (item: { period: string; value: string | null }) => ({
+        period: item.period,
+        value: item.value === null ? null : Number(item.value),
+      }),
+    );
     activeVolumeChart = new Chart(
       volumeCanvas,
-      volumeChartConfiguration(volume),
+      volumeChartConfiguration(volume, trend),
     );
   }
   canvas.dataset.chartReady = "true";

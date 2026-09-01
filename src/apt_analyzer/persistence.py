@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from apt_analyzer.apartment_data import ApartmentCandidate, months
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 SEOUL = ZoneInfo("Asia/Seoul")
 
 
@@ -51,6 +51,16 @@ class SavedApartmentInterest:
     apartment: Apartment
     source_name: str
     region_code: str
+
+
+@dataclass(frozen=True, slots=True)
+class HouseholdEvidenceRecord:
+    """Persisted whole-complex household denominator evidence."""
+
+    count: int
+    scope: str
+    source: str
+    fetched_at: str
 
 
 class SQLiteStore:
@@ -108,6 +118,41 @@ class SQLiteStore:
             (apartment.internal_id, apartment.display_name),
         )
         self._connection.commit()
+
+    def save_household_evidence(
+        self, apartment_id: str, count: int, *, scope: str, source: str
+    ) -> None:
+        """Persist validated household evidence for later offline analysis."""
+        if count <= 0 or scope != "complex" or not source.strip():
+            raise ValueError("household evidence must be positive, complex-scoped, and sourced")
+        self._connection.execute(
+            "INSERT INTO household_evidence(apartment_id, household_count, scope, source, fetched_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(apartment_id) DO UPDATE SET household_count=excluded.household_count, "
+            "scope=excluded.scope, source=excluded.source, fetched_at=excluded.fetched_at",
+            (
+                apartment_id,
+                count,
+                scope,
+                source,
+                datetime.now(UTC).replace(microsecond=0).isoformat(),
+            ),
+        )
+        self._connection.commit()
+
+    def load_household_evidence(self, apartment_id: str) -> HouseholdEvidenceRecord | None:
+        """Load persisted household evidence without contacting an external source."""
+        row = self._connection.execute(
+            "SELECT household_count, scope, source, fetched_at FROM household_evidence WHERE apartment_id=?",
+            (apartment_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return HouseholdEvidenceRecord(
+            int(row["household_count"]),
+            str(row["scope"]),
+            str(row["source"]),
+            str(row["fetched_at"]),
+        )
 
     def save_interest(
         self,
@@ -560,10 +605,11 @@ class SQLiteStore:
             self._migrate_v3()
             self._migrate_v4()
             self._migrate_v5()
+            self._migrate_v6()
             self._connection.commit()
             return
         version = int(row[0])
-        if version not in (1, 2, 3, 4, CURRENT_SCHEMA_VERSION):
+        if version not in (1, 2, 3, 4, 5, CURRENT_SCHEMA_VERSION):
             raise ValueError(f"unsupported schema version: {version}")
         if version == 1:
             self._migrate_v1()
@@ -576,6 +622,7 @@ class SQLiteStore:
             "CREATE TABLE IF NOT EXISTS apartments (internal_id TEXT PRIMARY KEY, display_name TEXT NOT NULL)"
         )
         self._migrate_v5()
+        self._migrate_v6()
         self._connection.commit()
 
     def _migrate_v3(self) -> None:
@@ -640,6 +687,21 @@ class SQLiteStore:
                 road_address TEXT NOT NULL, saved_at TEXT NOT NULL
             );
             UPDATE schema_version SET version=5;
+            """
+        )
+
+    def _migrate_v6(self) -> None:
+        """Add persisted K-APT whole-complex household evidence."""
+        self._connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS household_evidence (
+                apartment_id TEXT PRIMARY KEY,
+                household_count INTEGER NOT NULL CHECK(household_count > 0),
+                scope TEXT NOT NULL,
+                source TEXT NOT NULL,
+                fetched_at TEXT NOT NULL
+            );
+            UPDATE schema_version SET version=6;
             """
         )
 

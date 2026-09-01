@@ -15,7 +15,7 @@ tags:
 
 ## Scope
 
-This hub groups the twenty-three accepted requirements by knowledge dependency
+This hub groups the twenty-four accepted requirements by knowledge dependency
 instead of repeating their normative text.
 
 ## Knowledge
@@ -47,6 +47,9 @@ Local interface
 Local preferences
   R-023 → R-001/R-016/R-020
 
+Period-driven analysis
+  R-024 → R-003/R-008/R-010/R-011/R-013/R-014/R-019/R-020
+
 Multi-complex use
   R-016 → R-015 → R-021
 ```
@@ -64,6 +67,8 @@ The arrows express knowledge dependency, not implementation order or control flo
   and [ADR-0005](../../docs/decisions/ADR-0005-local-web-delivery-stack.md).
 - Local saved interests are mapped by [R-023](../../docs/requirements/R-023-saved-apartment-interests.md)
   and [Saved apartment interests](saved-apartment-interests.md).
+- Period defaults and rolling metrics are mapped by [R-024](../../docs/requirements/R-024-period-driven-analysis.md)
+  and [Period-driven analysis](period-driven-analysis.md).
 - Regional descriptive interpretation extends through [Regional relative analysis](regional-relative-analysis.md).
 
 ## Requirements
@@ -99,3 +104,4 @@ R-021 has independent profile and live multi-region evidence linked from its Req
 - [Analysis context](../domain/analysis-context.md)
 - [Transaction population](../data/transaction-population.md)
 - [Saved apartment interests](saved-apartment-interests.md)
+- [Period-driven analysis](period-driven-analysis.md)

@@ -3,7 +3,7 @@ title: Transaction Retention Rate
 type: metric
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-30
 aliases:
   - Downturn transaction retention
 tags:
@@ -21,7 +21,7 @@ Transaction retention relates annualized eligible activity in a comparison perio
 
 The normative definition is maintained in [Metric definitions](../../docs/domain/metrics.md#transaction-retention-rate). Retention is contextual: it describes two selected periods under one population policy, not a permanent characteristic of an apartment complex.
 
-Both periods must use the same identity, area group, transaction inclusion rules, and annualization semantics. The ratio normalizes against prior activity rather than household count, so it answers a different question from turnover. A zero baseline is not an ordinary zero-percent case; the ratio is undefined and needs an explicit result policy.
+Both periods must use the same identity, area group, transaction inclusion rules, and annualization semantics. The ratio normalizes against prior activity rather than household count, so it answers a different question from turnover. A zero baseline is not an ordinary zero-percent case; the ratio is undefined and needs an explicit result policy. The accepted [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) defines the single-analysis default anchored by calendar boundaries at the latest fully contained month, comparing its 12 consecutive months with the preceding non-overlapping 12, with the full 24-month span wholly inside the overall interval. Every month in the span needs successful or valid-empty coverage; any gap makes the default unavailable rather than skipping backward. Legacy comparison/screening flows retain their prior complete-year behavior.
 
 ## Graph connections
 
@@ -36,12 +36,13 @@ Both periods must use the same identity, area group, transaction inclusion rules
 - [R-010: Transaction retention rate](../../docs/requirements/R-010-transaction-retention-rate.md)
 - [R-016: Apartment comparison](../../docs/requirements/R-016-apartment-comparison.md)
 - [R-019: Visible analysis context](../../docs/requirements/R-019-analysis-context.md)
+- [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
 
 ## Decisions and open questions
 
-- [OQ-004: Partial-year annualization](../../docs/open-questions.md#oq-004-partial-year-annualization)
 - [OQ-005: Zero transaction-retention baseline](../../docs/open-questions.md#oq-005-zero-transaction-retention-baseline)
 - [OQ-006: Default direct-transaction policy](../../docs/open-questions.md#oq-006-default-direct-transaction-policy)
+- [OQ-004: Partial-year annualization](../../docs/open-questions.md#oq-004-partial-year-annualization)
 
 ## Evidence and interpretation risks
 

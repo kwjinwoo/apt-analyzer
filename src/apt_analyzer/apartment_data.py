@@ -32,6 +32,8 @@ class ApartmentCandidate:
     legal_dong_code: str
     lot_address: str
     road_address: str
+    household_count: int | None = None
+    household_source: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,12 +216,17 @@ class ApartmentDataService:
             selected.name
         ):
             return selected, IdentityResolution(ResolutionStatus.NOT_FOUND, (selected,))
+        household_count = _household_count(row)
         enriched = ApartmentCandidate(
             source_id=detail_id,
             name=detail_name,
             legal_dong_code=_pick(row, "bjdCode"),
             lot_address=_pick(row, "kaptAddr"),
             road_address=_pick(row, "doroJuso"),
+            household_count=household_count,
+            household_source=(
+                "K-APT apartment basic information" if household_count is not None else None
+            ),
         )
         return enriched, resolve_candidate((enriched,))
 
@@ -312,6 +319,21 @@ def normalize_transaction(row: Mapping[str, str], apartment_id: str) -> Normaliz
 
 def _pick(row: Mapping[str, str], *names: str) -> str:
     return next((row[name].strip() for name in names if row.get(name)), "")
+
+
+def _household_count(row: Mapping[str, str]) -> int | None:
+    """Parse positive integral K-APT household evidence, preferring ``hoCnt``."""
+    for name in ("hoCnt", "kaptdaCnt"):
+        raw = _pick(row, name)
+        if not raw:
+            continue
+        try:
+            value = Decimal(raw.replace(",", ""))
+        except InvalidOperation:
+            continue
+        if value > 0 and value == value.to_integral_value():
+            return int(value)
+    return None
 
 
 def _matches_lot_address(row: Mapping[str, str], lot_address: str) -> bool:

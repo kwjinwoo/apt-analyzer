@@ -30,13 +30,27 @@ export function priceChartConfiguration(
 
 export function volumeChartConfiguration(
   points: readonly ChartSeriesPoint[],
-): ChartConfiguration<"bar"> {
+  trend: readonly ChartSeriesPoint[] = [],
+): ChartConfiguration<"bar" | "line"> {
   const series = toChartSeries(points);
+  const trendSeries = toChartSeries(trend);
   return {
     type: "bar",
     data: {
       labels: series.labels,
-      datasets: [{ label: "유효 거래량", data: series.data }],
+      datasets: [
+        { label: "유효 거래량", data: series.data },
+        ...(trend.length
+          ? [
+              {
+                type: "line" as const,
+                label: "3개월 이동 평균 (참고)",
+                data: trendSeries.data,
+                spanGaps: false,
+              },
+            ]
+          : []),
+      ],
     },
     options: {
       plugins: { title: { display: true, text: "월별 유효 거래량" } },

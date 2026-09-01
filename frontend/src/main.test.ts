@@ -56,4 +56,20 @@ describe("local web foundation", () => {
       "월별 유효 거래량",
     );
   });
+
+  it("renders the supporting three-month series as a labeled line with null gaps", () => {
+    const configuration = volumeChartConfiguration(
+      [
+        { period: "2024-01", value: 1 },
+        { period: "2024-02", value: 2 },
+      ],
+      [
+        { period: "2024-01", value: null },
+        { period: "2024-02", value: 1.5 },
+      ],
+    );
+    expect(configuration.data.datasets[1]?.label).toContain("3개월");
+    expect(configuration.data.datasets[1]?.type).toBe("line");
+    expect(configuration.data.datasets[1]?.data).toEqual([null, 1.5]);
+  });
 });

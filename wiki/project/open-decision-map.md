@@ -27,7 +27,7 @@ Open questions are high-impact graph nodes because one decision can cascade acro
 | OQ-001 Stable apartment identity | Identity, transaction retrieval, household metadata, comparison |
 | OQ-002 Area-group boundary | Area discovery, filtering, price population, cross-complex comparison |
 | OQ-003 Missing price months | Price-series evidence, MDD, price visualization |
-| OQ-004 Partial-year annualization | Turnover, retention, analysis context |
+| OQ-004 Partial-year annualization | Turnover, retention, analysis context; ADR-0010 avoids it only for completed-month defaults |
 | OQ-005 Zero retention baseline | Retention result semantics |
 | OQ-006 Direct-transaction default | Transaction population, price series, every metric |
 | OQ-007 Outlier comparison | Transaction quality, price summaries, MDD |
@@ -52,7 +52,7 @@ When a question is resolved, the accepted ADR becomes the authority, affected li
 ## Decisions and open questions
 
 - [OQ-001 through OQ-009](../../docs/open-questions.md) are unresolved as of 2026-08-21.
-- No domain or metric-policy ADR beyond [ADR-0001](../../docs/decisions/ADR-0001-documentation-policy.md) has been accepted.
+- [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) accepts completed-month defaults while OQ-004 remains unresolved for arbitrary partial-year annualization.
 
 ## Evidence and interpretation risks
 

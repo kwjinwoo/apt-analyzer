@@ -4,12 +4,12 @@ title: Local browser analysis workspace
 status: accepted
 priority: P0
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-30
 origin: "Local-web product direction"
 supersedes: []
 superseded_by: null
-related_requirements: [R-001, R-002, R-013, R-014, R-016, R-017, R-019]
-related_decisions: [ADR-0005, ADR-0008]
+related_requirements: [R-001, R-002, R-013, R-014, R-016, R-017, R-019, R-024]
+related_decisions: [ADR-0005, ADR-0008, ADR-0010]
 ---
 
 # R-020: Local browser analysis workspace
@@ -34,7 +34,8 @@ the active analysis context and data availability states.
 - **AC-3:** A user can request an update for a selected period and distinguish fresh,
   stale, valid-empty, and failed evidence.
 - **AC-4:** A user can choose analysis period, area population, and transaction
-  inclusion policy before viewing metrics.
+  inclusion policy before viewing metrics; advanced controls remain available
+  when the initial flow centers on one overall period.
 - **AC-5:** A user can inspect transaction volume and price observations, compare
   selected apartments under a shared context, and export the same context.
 - **AC-6:** Credentials are kept on the server process and the default workspace is

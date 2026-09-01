@@ -3,7 +3,7 @@ title: Turnover Rate
 type: metric
 role: topic
 status: active
-updated: 2026-08-21
+updated: 2026-08-31
 aliases:
   - Apartment turnover
 tags:
@@ -25,6 +25,8 @@ Whole-complex turnover can normalize transactions by total households. If transa
 
 Annualization makes periods comparable only when boundary and duration semantics are explicit. Complete calendar-year turnover is simpler than arbitrary-date or partial-year turnover, which remains unresolved.
 
+The accepted [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) defines the single-analysis default anchored by calendar boundaries at the latest fully contained month, using the 12 consecutive calendar months ending there, with that entire span wholly inside the overall interval, and a valid applicable household denominator. Every month needs successful or valid-empty coverage; any gap makes the default unavailable rather than selecting an earlier month. Whole-complex K-APT household evidence can be persisted during explicit apartment-detail selection or refresh and reused by offline analysis; it is not borrowed for an area-filtered numerator.
+
 ## Graph connections
 
 - Uses eligible counts from [Transaction population](../data/transaction-population.md).
@@ -38,12 +40,14 @@ Annualization makes periods comparable only when boundary and duration semantics
 - [R-008: Multi-year turnover rate](../../docs/requirements/R-008-turnover-rate.md)
 - [R-009: Annual turnover rate](../../docs/requirements/R-009-annual-turnover-rate.md)
 - [R-019: Visible analysis context](../../docs/requirements/R-019-analysis-context.md)
+- [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
 
 ## Decisions and open questions
 
 - [OQ-004: Partial-year annualization](../../docs/open-questions.md#oq-004-partial-year-annualization)
 - [OQ-008: Area-filtered turnover presentation](../../docs/open-questions.md#oq-008-area-filtered-turnover-presentation)
-- No turnover annualization or area-filter presentation ADR has been accepted yet.
+- No separate ADR has resolved area-filter presentation; OQ-004 remains unresolved for arbitrary partial-year annualization.
+- [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) is accepted for completed-month defaults; OQ-004 remains unresolved generally.
 
 ## Evidence and interpretation risks
 
@@ -55,7 +59,7 @@ Annualization makes periods comparable only when boundary and duration semantics
 
 ## Verify in the repository
 
-[`turnover`](../../src/apt_analyzer/analytics.py) calculates complete calendar-year-aligned periods using the explicit `complete-calendar-year-average` annualization method and returns unavailable states for partial/outside periods, invalid household denominators, missing source evidence, or scope mismatch. `AnalysisResult.annual_turnover` exposes each complete represented year. Representative evidence is in [`test_m2.py`](../../tests/test_m2.py); area-specific denominator policy remains unresolved.
+[`turnover`](../../src/apt_analyzer/analytics.py) retains the explicit `complete-calendar-year-average` path for legacy flows. Single-apartment web analysis uses completed-month rolling defaults and can use persisted K-APT whole-complex household evidence. Representative evidence is in [`test_m2.py`](../../tests/test_m2.py) and [`test_web.py`](../../tests/test_web.py); area-specific denominator policy remains unresolved.
 
 ## Related pages
 

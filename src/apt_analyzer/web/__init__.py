@@ -20,11 +20,17 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from apt_analyzer.analytics import (
+    ANNUALIZATION_METHOD,
+    PRICE_SERIES_METHOD,
+    ROLLING_RETENTION_METHOD,
+    ROLLING_TURNOVER_METHOD,
     AnalysisResult,
     DataCoverageStatus,
     HouseholdEvidence,
     analyze,
+    derive_completed_month_periods,
     discover_area_groups,
+    monthly_transaction_trend,
 )
 from apt_analyzer.apartment_data import (
     KAPT_DETAIL_ENDPOINT,
@@ -114,6 +120,12 @@ _UI_LABELS = {
     "household source evidence is missing": "세대수 출처 근거가 없습니다",
     "household denominator scope does not match area selection": "세대수 분모 범위가 면적 선택과 일치하지 않습니다",
     "baseline annualized transaction count is zero": "기준 기간 연환산 거래량이 0입니다",
+    "baseline transaction count is zero": "기준 기간 거래량이 0입니다",
+    "required monthly coverage is incomplete": "필요한 월별 근거가 완전하지 않습니다",
+    "rolling turnover requires exactly 12 complete calendar months": "거래회전율은 완전한 연속 12개월이 필요합니다",
+    "rolling retention requires adjacent 12-month calendar windows": "거래유지율은 인접한 12개월 구간 두 개가 필요합니다",
+    "fewer than two observed months": "관측된 월이 두 개 미만입니다",
+    "metric period is outside overall analysis period": "지표 기간이 전체 분석 기간 밖에 있습니다",
     "metric unavailable": "사용 불가",
     "metric rule failed": "규칙 불충족",
     "transaction_count unavailable": "거래량: 사용 불가",
@@ -148,6 +160,8 @@ _UI_OPERATOR_LABELS = {
 _UI_METHOD_LABELS = {
     "overall-period eligible population": "전체 기간 유효 모집단",
     "complete-calendar-year-average": "완전한 달력 연도 평균",
+    "completed-calendar-month-12-month-window": "완료월 기준 연속 12개월",
+    "completed-calendar-month-12-vs-prior-12": "완료월 기준 최근 12개월과 직전 12개월 비교",
     "observed monthly median": "관측 월별 중간값",
 }
 _UI_UNIT_LABELS = {"KRW": "원", "sqm": "㎡", "count": "건", "ratio": "비율"}
@@ -299,6 +313,7 @@ def create_app(
     search_service: SearchService | None = None,
     store: SQLiteStore | None = None,
     search_clock: Callable[[], datetime] | None = None,
+    analysis_today: Callable[[], date] | None = None,
 ) -> FastAPI:
     """Create the local app with deterministic dependency injection."""
     app = FastAPI(title="apt-analyzer local web")
@@ -316,6 +331,7 @@ def create_app(
     app.state.usage_store = owned_store
     app.state.usage_limits = limits
     service = search_service or _default_service(owned_store)
+    today = analysis_today or date.today
     if search_service is None or hasattr(service, "list_region"):
         service = _PersistentProvinceSearch(
             cast(ProvinceListService, service), owned_store, clock=search_clock
@@ -394,6 +410,13 @@ def create_app(
             )
             workspace.selected_sido_code = workspace.search_sido_code
             owned_store.save_apartment(resolution.apartment)
+            if enriched.household_count is not None and enriched.household_source is not None:
+                owned_store.save_household_evidence(
+                    resolution.apartment.internal_id,
+                    enriched.household_count,
+                    scope="complex",
+                    source=enriched.household_source,
+                )
             workspace.apartments[resolution.apartment.internal_id] = resolution.apartment
             _hydrate_area_groups(workspace, owned_store, resolution.apartment.internal_id)
         return _page(request, templates, workspace, (enriched,))
@@ -439,6 +462,33 @@ def create_app(
         workspace.selected_sido_code = interest.region_code
         workspace.status = "selected"
         _hydrate_area_groups(workspace, owned_store, interest.apartment.internal_id)
+        return _page(request, templates, workspace, ())
+
+    @app.post("/household/refresh", response_class=HTMLResponse)
+    def refresh_household(request: Request) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        """Explicitly refresh K-APT household evidence for the current subject."""
+        if workspace.candidate is None or workspace.apartment is None:
+            return _page(request, templates, workspace, (), {"error": "먼저 단지를 선택해 주세요."})
+        try:
+            enriched, resolution = service.resolve(workspace.candidate)
+            if (
+                resolution.apartment is None
+                or resolution.apartment.internal_id != workspace.apartment.internal_id
+            ):
+                raise ValueError("단지 식별 근거가 변경되어 세대수를 저장하지 않았습니다.")
+            if enriched.household_count is None or enriched.household_source is None:
+                raise ValueError("K-APT 세대수 근거가 없습니다.")
+            owned_store.save_household_evidence(
+                workspace.apartment.internal_id,
+                enriched.household_count,
+                scope="complex",
+                source=enriched.household_source,
+            )
+            workspace.candidate = enriched
+            workspace.status = "selected"
+        except Exception as error:  # noqa: BLE001 - explicit source action is user-visible
+            workspace.status = "failed"
+            return _page(request, templates, workspace, (), {"error": str(error)})
         return _page(request, templates, workspace, ())
 
     @app.post("/interests/remove", response_class=HTMLResponse)
@@ -537,13 +587,19 @@ def create_app(
             workspace.status = "selection_required"
             return _page(request, templates, workspace, ())
         period = AnalysisPeriod(date.fromisoformat(start), date.fromisoformat(end))
+        rolling_periods = derive_completed_month_periods(period, today=today())
         transactions = owned_store.load_transactions(workspace.apartment.internal_id, period)
-        coverage = owned_store.coverage(
+        persisted_coverage = owned_store.coverage_states(
             workspace.apartment.internal_id, "MOLIT apartment sale transactions"
         )
         requested_months = months(period)
         availability = {
-            month: ("fresh" if month in coverage else "missing") for month in requested_months
+            month: (
+                "fresh"
+                if persisted_coverage.get(month) == "complete"
+                else persisted_coverage.get(month, "missing")
+            )
+            for month in requested_months
         }
         availability.update(
             {
@@ -554,6 +610,11 @@ def create_app(
                 if month in availability
             }
         )
+        period_status = {month: "complete" for month in requested_months}
+        for month in requested_months:
+            year, month_number = int(month[:4]), int(month[4:])
+            if date(year, month_number, calendar.monthrange(year, month_number)[1]) >= today():
+                period_status[month] = "incomplete"
         group = (
             next(
                 (item for item in discover_area_groups(transactions) if item.key == area_group),
@@ -575,101 +636,120 @@ def create_app(
                 frozenset(TransactionType(item) for item in transaction_types),
             ),
         )
+        for label, first, second in (
+            ("거래회전율", turnover_start, turnover_end),
+            ("기준 기간", baseline_start, baseline_end),
+            ("비교 기간", comparison_start, comparison_end),
+            ("MDD", mdd_start, mdd_end),
+        ):
+            if bool(first) != bool(second):
+                return _page(
+                    request,
+                    templates,
+                    workspace,
+                    (),
+                    {"error": f"{label} 시작일과 종료일을 함께 입력해 주세요."},
+                )
         complete_coverage = all(
             availability[item] in {"fresh", "skipped", "fetched", "valid_empty"}
             for item in requested_months
         )
-        if not complete_coverage:
-            workspace.status = "unavailable"
-            volume_series = [
-                {
-                    "period": f"{month[:4]}-{month[4:]}",
-                    "value": 0 if availability[month] == "valid_empty" else None,
-                    "status": availability[month],
-                }
-                for month in requested_months
-            ]
-            price_series = [
-                {"period": f"{month[:4]}-{month[4:]}", "value": None, "status": availability[month]}
-                for month in requested_months
-            ]
-            return _page(
-                request,
-                templates,
-                workspace,
-                (),
-                {
-                    "availability": availability,
-                    "volume_series": volume_series,
-                    "monthly_series": price_series,
-                    "data_status": "coverage-limited",
-                    "ui_context": {
-                        "apartment_id": workspace.apartment.internal_id,
-                        "apartment_name": workspace.apartment.display_name,
-                        "overall_period": _period_dict(period),
-                        "area": "all" if group is None else group.label,
-                        "inclusion_policy": {
-                            "include_cancelled": include_cancelled,
-                            "transaction_types": transaction_types,
-                        },
-                        "metric_periods": {
-                            name: _period_dict(value)
-                            for name, value in (
-                                ("turnover", _form_period(turnover_start, turnover_end, period)),
-                                ("baseline", _form_period(baseline_start, baseline_end, period)),
-                                (
-                                    "comparison",
-                                    _form_period(comparison_start, comparison_end, period),
-                                ),
-                                ("mdd", _form_period(mdd_start, mdd_end, period)),
-                            )
-                        },
-                    },
-                    "context": {
-                        "period": {"start": start, "end": end},
-                        "inclusion_policy": {
-                            "include_cancelled": include_cancelled,
-                            "transaction_types": transaction_types,
-                        },
-                        "available_area_groups": [
-                            {"key": item.key, "label": item.label}
-                            for item in discover_area_groups(transactions)
-                        ],
-                        "ui_context": {
-                            "apartment_id": workspace.apartment.internal_id,
-                            "apartment_name": workspace.apartment.display_name,
-                            "overall_period": _period_dict(period),
-                            "area": "all" if group is None else group.label,
-                            "inclusion_policy": {
-                                "include_cancelled": include_cancelled,
-                                "transaction_types": transaction_types,
-                            },
-                        },
-                    },
-                },
-            )
+        default_turnover_period = rolling_periods.turnover
+        default_baseline_period = rolling_periods.baseline
+        default_comparison_period = rolling_periods.turnover
+        persisted_household = owned_store.load_household_evidence(workspace.apartment.internal_id)
+        effective_household_count = household_count
+        effective_household_scope = household_scope
+        effective_household_source = household_source or None
+        if (
+            effective_household_count is None
+            and not household_source
+            and household_scope == "complex"
+            and group is None
+            and persisted_household is not None
+        ):
+            effective_household_count = persisted_household.count
+            effective_household_scope = persisted_household.scope
+            effective_household_source = persisted_household.source
+        if group is not None and household_count is None:
+            effective_household_count = None
+            effective_household_source = None
         result = analyze(
             transactions,
             context,
-            turnover_period=_form_period(turnover_start, turnover_end, period),
-            household=HouseholdEvidence(household_count, household_scope, household_source or None),
-            baseline_period=_form_period(baseline_start, baseline_end, period),
-            comparison_period=_form_period(comparison_start, comparison_end, period),
+            turnover_period=(
+                _form_period(turnover_start, turnover_end, period)
+                if turnover_start and turnover_end
+                else default_turnover_period
+            ),
+            household=HouseholdEvidence(
+                effective_household_count, effective_household_scope, effective_household_source
+            ),
+            baseline_period=(
+                _form_period(baseline_start, baseline_end, period)
+                if baseline_start and baseline_end
+                else default_baseline_period
+            ),
+            comparison_period=(
+                _form_period(comparison_start, comparison_end, period)
+                if comparison_start and comparison_end
+                else default_comparison_period
+            ),
             mdd_period=_form_period(mdd_start, mdd_end, period),
             data_status=DataCoverageStatus.COMPLETE
             if transactions
             else DataCoverageStatus.VALID_EMPTY,
+            rolling_today=today(),
+            monthly_coverage=availability,
+            rolling_defaults=True,
         )
-        workspace.status = "analyzed"
+        workspace.status = "unavailable" if not complete_coverage else "analyzed"
         app.state.last_result = result_to_dict(result)
+        app.state.last_result["data_status"] = (
+            "coverage-limited"
+            if not complete_coverage
+            else app.state.last_result.get("data_status", "complete")
+        )
         app.state.last_result["availability"] = availability
-        app.state.last_result["coverage"] = {
+        app.state.last_result["coverage"] = dict(availability)
+        app.state.last_result["observations"] = {
             month: "observed"
             if any(item.month == f"{month[:4]}-{month[4:]}" for item in result.monthly_prices)
-            else "valid_empty"
+            else "no_observation"
             for month in requested_months
         }
+        app.state.last_result["metric_display"] = {
+            "turnover": {"unit": "%", "meaning": "기간 내 유효 거래량 ÷ 세대수"},
+            "retention": {"unit": "%", "meaning": "비교 기간 거래량 ÷ 기준 기간 거래량"},
+            "mdd": {"unit": "%", "meaning": "가격 시계열 최대낙폭"},
+        }
         app.state.last_result["monthly_series"] = _monthly_series(result, requested_months)
+        for item in app.state.last_result["monthly_series"]:
+            key = str(item["period"]).replace("-", "")
+            item["coverage_status"] = availability[key]
+            item["period_status"] = period_status[key]
+            if item["value"] is None and availability[key] not in {
+                "complete",
+                "fresh",
+                "fetched",
+                "skipped",
+                "valid_empty",
+            }:
+                item["transaction_count"] = None
+        app.state.last_result["trend_series"] = [
+            {
+                "period": f"{item.month[:4]}-{item.month[4:]}",
+                "value": None
+                if item.trailing_three_month_mean is None
+                else str(item.trailing_three_month_mean),
+                "status": item.status.split(":", 1)[-1],
+                "coverage_status": item.status.split(":", 1)[0],
+                "period_status": item.status.split(":", 1)[-1],
+            }
+            for item in monthly_transaction_trend(
+                result.population, period, availability, today=today()
+            )
+        ]
         eligible_by_month = {
             month: sum(
                 1
@@ -681,8 +761,16 @@ def create_app(
         app.state.last_result["volume_series"] = [
             {
                 "period": f"{month[:4]}-{month[4:]}",
-                "value": eligible_by_month[month],
+                "value": (
+                    eligible_by_month[month]
+                    if eligible_by_month[month] > 0
+                    or availability[month]
+                    in {"complete", "fresh", "fetched", "skipped", "valid_empty"}
+                    else None
+                ),
                 "status": availability[month],
+                "coverage_status": availability[month],
+                "period_status": period_status[month],
             }
             for month in requested_months
         ]
@@ -691,18 +779,89 @@ def create_app(
             "apartment_name": workspace.apartment.display_name,
             "overall_period": _period_dict(period),
             "area": "all" if group is None else group.label,
+            "area_group_key": area_group,
             "inclusion_policy": {
                 "include_cancelled": include_cancelled,
                 "transaction_types": transaction_types,
             },
+            "household": {
+                "count": effective_household_count,
+                "scope": effective_household_scope,
+                "source": effective_household_source,
+            },
             "metric_periods": {
-                name: _period_dict(value)
+                name: value
                 for name, value in (
-                    ("turnover", _form_period(turnover_start, turnover_end, period)),
-                    ("baseline", _form_period(baseline_start, baseline_end, period)),
-                    ("comparison", _form_period(comparison_start, comparison_end, period)),
-                    ("mdd", _form_period(mdd_start, mdd_end, period)),
+                    (
+                        "turnover",
+                        _metric_period_value(
+                            turnover_start, turnover_end, rolling_periods.turnover, period
+                        ),
+                    ),
+                    (
+                        "baseline",
+                        _metric_period_value(
+                            baseline_start, baseline_end, rolling_periods.baseline, period
+                        ),
+                    ),
+                    (
+                        "comparison",
+                        _metric_period_value(
+                            comparison_start, comparison_end, rolling_periods.turnover, period
+                        ),
+                    ),
+                    ("mdd", _period_dict(_form_period(mdd_start, mdd_end, period))),
                 )
+            },
+            "metric_period_sources": {
+                "turnover": "override" if turnover_start or turnover_end else "automatic",
+                "retention": "override"
+                if any((baseline_start, baseline_end, comparison_start, comparison_end))
+                else "automatic",
+                "mdd": "override" if mdd_start or mdd_end else "overall",
+            },
+            "rolling_anchor": rolling_periods.anchor,
+            "metric_methods": {
+                "turnover": (
+                    result.turnover.annualization_method
+                    if result.turnover is not None
+                    else (
+                        ANNUALIZATION_METHOD
+                        if turnover_start or turnover_end
+                        else ROLLING_TURNOVER_METHOD
+                    )
+                ),
+                "retention": (
+                    result.retention.annualization_method
+                    if result.retention is not None
+                    else (
+                        ANNUALIZATION_METHOD
+                        if any(
+                            (
+                                baseline_start,
+                                baseline_end,
+                                comparison_start,
+                                comparison_end,
+                            )
+                        )
+                        else ROLLING_RETENTION_METHOD
+                    )
+                ),
+                "mdd": PRICE_SERIES_METHOD,
+            },
+            "metric_period_overrides": {
+                field: value
+                for field, value in (
+                    ("turnover_start", turnover_start),
+                    ("turnover_end", turnover_end),
+                    ("baseline_start", baseline_start),
+                    ("baseline_end", baseline_end),
+                    ("comparison_start", comparison_start),
+                    ("comparison_end", comparison_end),
+                    ("mdd_start", mdd_start),
+                    ("mdd_end", mdd_end),
+                )
+                if value
             },
         }
         return _page(request, templates, workspace, (), app.state.last_result)
@@ -1089,6 +1248,11 @@ def _page(
         }
         for service_id, label, _env_name, _default in _API_SERVICES
     )
+    household_evidence = (
+        None
+        if workspace.apartment is None
+        else usage_store.load_household_evidence(workspace.apartment.internal_id)
+    )
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -1102,6 +1266,7 @@ def _page(
             "api_usage_total": sum(int(item["used"]) for item in api_usage),
             "comparison_area_groups": _comparison_area_groups(workspace),
             "interests": usage_store.list_interests(),
+            "household_evidence": household_evidence,
             "ui": {
                 "labels": _UI_LABELS,
                 "metric_labels": _UI_METRIC_LABELS,
@@ -1109,8 +1274,20 @@ def _page(
                 "method_labels": _UI_METHOD_LABELS,
                 "unit_labels": _UI_UNIT_LABELS,
             },
+            "format_percentage": _format_percentage,
+            "format_krw": _format_krw,
         },
     )
+
+
+def _format_percentage(value: str | float | Decimal | int | None) -> str:
+    """Format an exact ratio as a human-readable percentage."""
+    return "사용 불가" if value is None else f"{Decimal(str(value)) * 100:.2f}%"
+
+
+def _format_krw(value: str | float | Decimal | int | None) -> str:
+    """Format an observed won amount for human-readable metric evidence."""
+    return "-" if value is None else f"{int(value):,}원"
 
 
 def _hydrate_area_groups(workspace: Workspace, store: SQLiteStore, apartment_id: str) -> None:
@@ -1162,6 +1339,15 @@ def _form_period(start: str, end: str, fallback: AnalysisPeriod) -> AnalysisPeri
 def _period_dict(period: AnalysisPeriod) -> dict[str, str]:
     """Serialize a visible metric period."""
     return {"start": period.start.isoformat(), "end": period.end.isoformat()}
+
+
+def _metric_period_value(
+    start: str, end: str, automatic: AnalysisPeriod | None, overall: AnalysisPeriod
+) -> dict[str, str] | None:
+    """Serialize an explicit override or nullable automatic period."""
+    if start and end:
+        return _period_dict(AnalysisPeriod(date.fromisoformat(start), date.fromisoformat(end)))
+    return None if automatic is None else _period_dict(automatic)
 
 
 def _coverage_status_label(status: str) -> str:

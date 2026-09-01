@@ -271,6 +271,42 @@ th {
   border-top: 1px solid #e5eaf0;
   padding: 0.7rem 0;
 }
+.metric-summary {
+  overflow-x: auto;
+}
+.metric-summary table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.metric-summary th,
+.metric-summary td {
+  border-bottom: 1px solid #d8e1ec;
+  padding: 0.8rem;
+  text-align: left;
+  vertical-align: top;
+}
+.metric-summary tbody th {
+  white-space: nowrap;
+}
+.metric-summary tbody td:nth-child(2) {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.context-details table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.context-details th,
+.context-details td {
+  padding: 0.45rem;
+  border-bottom: 1px solid #e5eaf0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.context-details table {
+  min-width: 0;
+}
 details {
   grid-column: 1 / -1;
   border: 1px solid #d8e1ec;
@@ -323,5 +359,49 @@ pre {
   }
   section {
     padding: 1rem;
+  }
+  .metric-summary {
+    overflow: visible;
+    max-width: 100%;
+  }
+  .metric-summary thead {
+    display: none;
+  }
+  .metric-summary table,
+  .metric-summary tbody,
+  .metric-summary tr,
+  .metric-summary th,
+  .metric-summary td {
+    display: block;
+    width: auto;
+    min-width: 0;
+  }
+  .metric-summary tr {
+    background: #f8fbff;
+    border: 1px solid #d8e1ec;
+    border-radius: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+  }
+  .metric-summary th,
+  .metric-summary td {
+    border: 0;
+    padding: 0.3rem 0.4rem;
+  }
+  .metric-summary td::before,
+  .metric-summary th::before {
+    content: attr(data-label);
+    display: block;
+    color: #52667d;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 0.15rem;
+  }
+  .metric-summary tbody th:first-child::before {
+    display: none;
+  }
+  .metric-summary tbody td:nth-child(2) {
+    text-align: left;
+    font-size: 1.15rem;
   }
 }

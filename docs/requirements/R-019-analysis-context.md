@@ -4,12 +4,12 @@ title: Visible analysis context
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-22
+updated: 2026-08-31
 origin: "Initial requirements R17"
 supersedes: []
 superseded_by: null
-related_requirements: [R-003, R-006, R-008, R-010, R-011, R-016, R-017]
-related_decisions: []
+related_requirements: [R-003, R-006, R-008, R-010, R-011, R-016, R-017, R-024]
+related_decisions: [ADR-0010]
 ---
 
 # R-019: Visible analysis context
@@ -31,10 +31,14 @@ The user can inspect the analysis conditions used to produce every result.
 - **AC-5:** Transaction inclusion and outlier policies are available.
 - **AC-6:** Relevant household-count scope and source evidence are available for turnover.
 - **AC-7:** Machine-readable output retains equivalent context to human-readable output.
+- **AC-8:** Single-apartment human results present core metrics in a directly
+  comparable summary table while keeping detailed reproducibility context
+  inspectable in a collapsed section.
 
 ## Constraints
 
 - Context must travel with a result rather than relying on session state or presentation defaults.
+- Period-driven defaults and explicit overrides must expose their effective periods and derivation methods as defined by [R-024](R-024-period-driven-analysis.md).
 
 ## Non-goals
 
@@ -46,6 +50,8 @@ The user can inspect the analysis conditions used to produce every result.
 
 - [`test_domain_values_represent_source_independent_analysis_context`](../../tests/test_domain.py) covers the domain representation for AC-1, AC-2, and AC-5.
 - [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers retention of that context on a machine-readable transaction-volume result for AC-7.
+- [`test_analysis_renders_korean_reproducible_context`](../../tests/test_web.py)
+  covers the core metrics table and collapsed detailed context for AC-8.
 
 ### Manual or data validation
 

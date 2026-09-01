@@ -17,7 +17,7 @@ from apt_analyzer.domain import AnalysisPeriod, Apartment, TransactionType
 
 
 def test_selected_candidate_is_enriched_from_kapt_detail_before_resolution() -> None:
-    detail = """<response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header><body><item><kaptCode>A14383205</kaptCode><kaptName>구의현대2단지</kaptName><bjdCode>1121510300</bjdCode><kaptAddr>서울특별시 광진구 구의동 611</kaptAddr><doroJuso>서울특별시 광진구 광나루로56길 32</doroJuso></item></body></response>""".encode()
+    detail = """<response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header><body><item><kaptCode>A14383205</kaptCode><kaptName>구의현대2단지</kaptName><bjdCode>1121510300</bjdCode><kaptAddr>서울특별시 광진구 구의동 611</kaptAddr><doroJuso>서울특별시 광진구 광나루로56길 32</doroJuso><hoCnt>1842</hoCnt></item></body></response>""".encode()
     seen = ""
 
     def transport(url: str, _timeout: float) -> bytes:
@@ -35,9 +35,42 @@ def test_selected_candidate_is_enriched_from_kapt_detail_before_resolution() -> 
     assert enriched.legal_dong_code == "1121510300"
     assert enriched.lot_address.endswith("구의동 611")
     assert enriched.road_address.endswith("광나루로56길 32")
+    assert enriched.household_count == 1842
+    assert enriched.household_source == "K-APT apartment basic information"
     assert resolution.status is ResolutionStatus.RESOLVED
     assert resolution.apartment is not None
     assert resolution.apartment.internal_id.startswith("apt-")
+
+
+@pytest.mark.parametrize(
+    ("household_xml", "expected"),
+    [
+        ("<hoCnt>1,842</hoCnt><kaptdaCnt>999.0</kaptdaCnt>", 1842),
+        ("<hoCnt>invalid</hoCnt><kaptdaCnt>1842.0</kaptdaCnt>", 1842),
+        ("<hoCnt>0</hoCnt><kaptdaCnt>1842.5</kaptdaCnt>", None),
+    ],
+)
+def test_kapt_household_evidence_requires_a_positive_integral_count(
+    household_xml: str, expected: int | None
+) -> None:
+    detail = (
+        "<response><header><resultCode>00</resultCode><resultMsg>OK</resultMsg></header>"
+        "<body><item><kaptCode>A1</kaptCode><kaptName>Example</kaptName>"
+        "<bjdCode>1234567890</bjdCode><kaptAddr>Example lot</kaptAddr>"
+        f"<doroJuso>Example road</doroJuso>{household_xml}</item></body></response>"
+    ).encode()
+    service = ApartmentDataService(
+        DataGoKrClient("encoded", transport=lambda _url, _timeout: detail)
+    )
+
+    enriched, _resolution = service.resolve(
+        ApartmentCandidate("A1", "Example", "", "Example lot", "")
+    )
+
+    assert enriched.household_count == expected
+    assert enriched.household_source == (
+        "K-APT apartment basic information" if expected is not None else None
+    )
 
 
 def test_normalization_preserves_required_optional_and_source_values() -> None:

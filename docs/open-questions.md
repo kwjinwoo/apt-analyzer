@@ -64,7 +64,7 @@ Unresolved. Do not interpolate without an accepted decision.
 
 ### Question
 
-How should turnover and transaction counts be annualized when an analysis interval contains partial calendar years or arbitrary dates?
+How should turnover and transaction counts be annualized when an analysis interval contains partial calendar years or arbitrary dates? ADR-0010 avoids this question for default rolling windows by using exact completed calendar months, but does not resolve the general policy.
 
 ### Why it matters
 

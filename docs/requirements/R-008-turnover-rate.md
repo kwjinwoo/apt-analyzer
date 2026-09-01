@@ -4,12 +4,12 @@ title: Multi-year turnover rate
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-31
 origin: "Initial requirements R8"
 supersedes: []
 superseded_by: null
 related_requirements: [R-003, R-006, R-009, R-017, R-019]
-related_decisions: []
+related_decisions: [ADR-0010]
 ---
 
 # R-008: Multi-year turnover rate
@@ -29,15 +29,22 @@ The user can obtain a turnover rate for a selected period, defined as annualized
 - **AC-3:** The annualized count is divided by the applicable household count.
 - **AC-4:** The result exposes the period, transaction count, annualization method, household count, area selection, and inclusion policy.
 - **AC-5:** An exact turnover percentage is not returned when the required household count is unknown or invalid.
+- **AC-6:** Human presentation identifies turnover as a percentage (`%`) while
+  machine results retain the exact ratio.
+- **AC-7:** When an explicit K-APT apartment-detail request returns a valid
+  positive whole-complex household count, the local workspace persists that
+  sourced denominator and can explicitly refresh it. Later analysis may use
+  the persisted evidence without contacting the external source.
 
 ## Constraints
 
 - An area-filtered transaction numerator does not establish an exact area-level turnover rate without an area-specific household denominator.
-- Partial-year annualization is not yet defined.
+- Partial-year annualization remains unresolved; the completed-month defaults in [ADR-0010](../decisions/ADR-0010-completed-month-rolling-analysis.md) avoid that question without defining a general partial-year policy.
 
 ## Non-goals
 
 - Treating turnover as a prediction or investment recommendation.
+- Implicit external household refresh during analysis or re-analysis.
 
 ## Verification
 
@@ -51,7 +58,7 @@ The user can obtain a turnover rate for a selected period, defined as annualized
 
 ### Verification gaps
 
-- AC-1 through AC-5 have no implementation evidence yet.
+- [`test_selected_kapt_households_are_persisted_and_used_offline_for_percent_metrics`](../../tests/test_web.py) covers selection-time persistence, persisted fallback, percentage presentation, and analysis/re-analysis without acquisition. [`test_explicit_household_refresh_preserves_last_good_evidence_on_failure`](../../tests/test_web.py) covers explicit refresh and last-good-evidence preservation. Legacy calendar-year calculations remain covered by the domain tests above.
 
 ## Open questions
 
