@@ -25,3 +25,7 @@ Once accepted, an ADR preserves the decision made at that time. Correcting wordi
 | [ADR-0008](ADR-0008-interactive-province-list-freshness.md) | Interactive province-list freshness and stale fallback | accepted | 2026-08-28 |
 | [ADR-0009](ADR-0009-explicit-transaction-name-aliases.md) | Explicit source-scoped transaction-name aliases | accepted | 2026-08-30 |
 | [ADR-0010](ADR-0010-completed-month-rolling-analysis.md) | Completed-month rolling analysis | accepted | 2026-08-30 |
+| [ADR-0011](ADR-0011-interactive-period-overrides.md) | Interactive completed-month period overrides | superseded | 2026-09-01 |
+| [ADR-0012](ADR-0012-direct-chart-preview.md) | Direct non-mutating chart previews | superseded | 2026-09-03 |
+| [ADR-0013](ADR-0013-duration-aware-chart-preview-turnover.md) | Duration-aware chart preview turnover | superseded | 2026-09-03 |
+| [ADR-0014](ADR-0014-chart-preview-retention-split.md) | Chart preview 24-month retention split | accepted | 2026-09-07 |

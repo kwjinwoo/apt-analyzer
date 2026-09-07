@@ -4,12 +4,12 @@ title: Visible analysis context
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-31
+updated: 2026-09-03
 origin: "Initial requirements R17"
 supersedes: []
 superseded_by: null
-related_requirements: [R-003, R-006, R-008, R-010, R-011, R-016, R-017, R-024]
-related_decisions: [ADR-0010]
+related_requirements: [R-003, R-006, R-008, R-010, R-011, R-016, R-017, R-024, R-026]
+related_decisions: [ADR-0010, ADR-0012]
 ---
 
 # R-019: Visible analysis context
@@ -34,6 +34,8 @@ The user can inspect the analysis conditions used to produce every result.
 - **AC-8:** Single-apartment human results present core metrics in a directly
   comparable summary table while keeping detailed reproducibility context
   inspectable in a collapsed section.
+- **AC-9:** Monthly volume and price evidence remain available together in one
+  default-collapsed section so long evidence does not obscure the core result.
 
 ## Constraints
 
@@ -52,6 +54,8 @@ The user can inspect the analysis conditions used to produce every result.
 - [`test_transaction_volume_uses_explicit_population_without_external_api`](../../tests/test_transaction_volume.py) covers retention of that context on a machine-readable transaction-volume result for AC-7.
 - [`test_analysis_renders_korean_reproducible_context`](../../tests/test_web.py)
   covers the core metrics table and collapsed detailed context for AC-8.
+- [`test_chart_drag_previews_metrics_without_mutating_official_analysis`](../../tests/test_web_e2e.py)
+  covers the default-collapsed combined monthly evidence and its disclosure for AC-9.
 
 ### Manual or data validation
 

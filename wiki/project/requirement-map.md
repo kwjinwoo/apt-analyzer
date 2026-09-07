@@ -3,7 +3,7 @@ title: Requirement Map
 type: project
 role: topic
 status: active
-updated: 2026-08-27
+updated: 2026-09-03
 aliases:
   - Requirement knowledge graph
 tags:
@@ -15,7 +15,7 @@ tags:
 
 ## Scope
 
-This hub groups the twenty-four accepted requirements by knowledge dependency
+This hub groups the twenty-seven catalogued requirements by knowledge dependency
 instead of repeating their normative text.
 
 ## Knowledge
@@ -49,6 +49,10 @@ Local preferences
 
 Period-driven analysis
   R-024 → R-003/R-008/R-010/R-011/R-013/R-014/R-019/R-020
+  R-025 (superseded by R-026)
+  R-026 (superseded by R-027) → R-008/R-010/R-011/R-019/R-024
+  R-027 (superseded by R-028) → R-008/R-026
+  R-028 → R-010/R-027
 
 Multi-complex use
   R-016 → R-015 → R-021
@@ -69,6 +73,10 @@ The arrows express knowledge dependency, not implementation order or control flo
   and [Saved apartment interests](saved-apartment-interests.md).
 - Period defaults and rolling metrics are mapped by [R-024](../../docs/requirements/R-024-period-driven-analysis.md)
   and [Period-driven analysis](period-driven-analysis.md).
+- Current direct chart exploration, duration-aware turnover, and 12/24-month
+  retention preview behavior are governed by [R-028](../../docs/requirements/R-028-chart-preview-retention-split.md)
+  and [ADR-0014](../../docs/decisions/ADR-0014-chart-preview-retention-split.md).
+  R-026/R-027 and ADR-0012/ADR-0013 remain historical superseded decisions.
 - Regional descriptive interpretation extends through [Regional relative analysis](regional-relative-analysis.md).
 
 ## Requirements

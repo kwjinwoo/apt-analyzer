@@ -40,6 +40,10 @@ Use [TEMPLATE.md](TEMPLATE.md) when adding a requirement.
 | [R-022](R-022-local-productized-screening.md) | Local productized analysis and screening workspace | accepted | P0 | Roadmap M7 |
 | [R-023](R-023-saved-apartment-interests.md) | Saved apartment interests | accepted | P1 | User-approved MVP direction |
 | [R-024](R-024-period-driven-analysis.md) | Period-driven analysis and completed-month rolling metrics | accepted | P0 | User-approved period-driven analysis UX |
+| [R-025](R-025-chart-period-selection.md) | Chart period selection | superseded | P1 | User-approved chart period workflow |
+| [R-026](R-026-chart-preview.md) | Non-mutating chart period preview | superseded | P1 | Superseded by R-027 duration-aware preview turnover |
+| [R-027](R-027-chart-preview-turnover.md) | Duration-aware chart preview turnover | superseded | P1 | Superseded by R-028 retention split |
+| [R-028](R-028-chart-preview-retention-split.md) | Duration-aware chart preview retention split | accepted | P1 | User-approved 24-month preview retention interpretation |
 
 ## Change policy
 

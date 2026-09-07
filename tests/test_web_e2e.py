@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import socket
 import threading
 import time
@@ -104,6 +105,8 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             expect(page.locator("#volume-chart")).to_have_count(1)
             expect(page.locator("#price-chart")).to_have_attribute("data-chart-ready", "true")
             expect(page.locator("#volume-chart")).to_have_attribute("data-chart-ready", "true")
+            expect(page.get_by_role("button", name="기간 선택 시작")).to_have_count(0)
+            expect(page.get_by_role("button", name="적용")).to_have_count(0)
             expect(page.get_by_role("table", name="핵심 분석 지표")).to_be_visible()
             context_details = page.locator("details.context-details")
             expect(context_details).not_to_have_attribute("open", "")
@@ -120,7 +123,17 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             page.set_viewport_size({"width": 1280, "height": 900})
             assert page.locator("#price-chart").evaluate("(canvas) => canvas.width") > 0
             assert page.locator("#volume-chart").evaluate("(canvas) => canvas.width") > 0
-            expect(page.get_by_role("table", name="월별 거래량")).to_contain_text("2024-01")
+            evidence_details = page.locator("details.monthly-evidence-details")
+            expect(evidence_details).not_to_have_attribute("open", "")
+            expect(evidence_details.get_by_role("table", name="월별 거래량")).not_to_be_visible()
+            expect(
+                evidence_details.get_by_role("table", name="월별 가격 중간값")
+            ).not_to_be_visible()
+            evidence_details.locator("summary").click()
+            expect(evidence_details.get_by_role("table", name="월별 거래량")).to_contain_text(
+                "2024-01"
+            )
+            expect(evidence_details.get_by_role("table", name="월별 가격 중간값")).to_be_visible()
             editor = page.locator("#analysis-result-editor")
             expect(editor).to_be_visible()
             expect(
@@ -144,7 +157,7 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             editor.locator('input[name="end"]').fill("2024-06-30")
             with page.expect_response(lambda item: item.url.endswith("/analysis")):
                 editor.get_by_role("button", name="이 기간으로 다시 분석").click()
-            expect(page.get_by_role("table", name="월별 거래량")).not_to_contain_text("2024-01")
+            expect(page.locator("details.monthly-evidence-details")).not_to_contain_text("2024-01")
             editor = page.locator("#analysis-result-editor")
             expect(editor.locator('input[name="start"]')).to_have_value("2024-02-01")
             export_analysis = page.request.get(f"http://127.0.0.1:{port}/export?kind=analysis")
@@ -190,6 +203,145 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             export_response = page.request.get(f"http://127.0.0.1:{port}/export?kind=comparison")
             assert export_response.ok and len(export_response.json()["subjects"]) == 2
             assert "encoded-secret" not in page.content()
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.e2e
+def test_chart_drag_previews_metrics_without_mutating_official_analysis() -> None:
+    port_socket = socket.socket()
+    port_socket.bind(("127.0.0.1", 0))
+    port = port_socket.getsockname()[1]
+    port_socket.close()
+    app = create_app(
+        search_service=BrowserFixtureService(),
+        store=SQLiteStore(":memory:"),
+        analysis_today=lambda: date(2026, 8, 30),
+    )
+    server = Server(Config(app, host="127.0.0.1", port=port, log_level="error"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        while not server.started:
+            time.sleep(0.05)
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page()
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.get_by_label("아파트 이름").fill("Alpha")
+            page.locator('form[action="/search"]').get_by_role("button", name="검색하기").click()
+            page.get_by_role("button", name="이 단지 선택").click()
+            update = page.locator('form[action="/update"]')
+            update.locator('input[name="start"]').fill("2020-09-01")
+            update.locator('input[name="end"]').fill("2023-08-31")
+            update.get_by_role("button", name="SQLite 근거 갱신").click()
+            page.wait_for_load_state("networkidle")
+            analysis = page.locator("#analysis-form")
+            analysis.locator('input[name="start"]').fill("2020-09-01")
+            analysis.locator('input[name="end"]').fill("2023-08-31")
+            analysis.get_by_text("고급 분석 설정").click()
+            analysis.locator('input[name="household_count"]').fill("100")
+            analysis.locator('input[name="household_source"]').fill("fixture")
+            analysis.get_by_role("button", name="분석 실행").click()
+            page.wait_for_timeout(500)
+            canvas = page.locator("#volume-chart")
+            canvas.scroll_into_view_if_needed()
+            expect(canvas).to_be_in_viewport()
+            expect(page.get_by_role("button", name="기간 선택 시작")).to_have_count(0)
+            expect(page.get_by_role("button", name="적용")).to_have_count(0)
+            expect(page.get_by_role("button", name="취소")).to_have_count(0)
+            expect(page.get_by_role("button", name="자동 기간으로 복원")).to_have_count(0)
+            box = canvas.bounding_box()
+            assert box is not None
+            centers = canvas.get_attribute("data-period-centers")
+            assert centers is not None
+            values = json.loads(centers)
+            labels = json.loads(canvas.get_attribute("data-period-labels") or "[]")
+            start_index = labels.index("2021-09")
+            end_index = start_index + 11
+            summary_before = page.get_by_role("table", name="핵심 분석 지표").inner_text()
+            editor = page.locator("#analysis-result-editor")
+            editor_before = editor.locator("input").evaluate_all(
+                "nodes => nodes.map(node => [node.name, node.value, node.checked])"
+            )
+            export_before = page.request.get(f"http://127.0.0.1:{port}/export?kind=analysis").json()
+            preview_requests = 0
+
+            def count_preview(request) -> None:
+                nonlocal preview_requests
+                if request.url.endswith("/analysis/preview"):
+                    preview_requests += 1
+
+            page.on("request", count_preview)
+            page.mouse.move(box["x"] + values[start_index], box["y"] + box["height"] / 2)
+            page.mouse.down()
+            page.mouse.move(box["x"] + values[end_index], box["y"] + box["height"] / 2)
+            assert preview_requests == 0
+            with page.expect_response(
+                lambda response: (
+                    response.url.endswith("/analysis/preview") and response.request.method == "POST"
+                )
+            ):
+                page.mouse.up()
+            expect(page.locator("#brush-status")).to_contain_text("2021.09 ~ 2022.08")
+            expect(canvas).to_have_attribute("data-selected-range", f"{start_index}:{end_index}")
+            preview = page.locator("#analysis-preview")
+            expect(preview).to_be_visible()
+            expect(preview).to_contain_text("선택 기간 참고 미리보기")
+            expect(preview).to_contain_text("유효 거래량12건")
+            expect(preview).to_contain_text("거래회전율12.00%")
+            expect(preview).to_contain_text("12건 / 100세대")
+            expect(preview).to_contain_text("거래유지율100.00%")
+            expect(preview).to_contain_text("2021.09~2022.08 12건 / 2020.09~2021.08 12건")
+            expect(preview).to_contain_text("최대 낙폭(MDD)-9.82%")
+            assert preview_requests == 1
+            assert page.get_by_role("table", name="핵심 분석 지표").inner_text() == summary_before
+            assert (
+                editor.locator("input").evaluate_all(
+                    "nodes => nodes.map(node => [node.name, node.value, node.checked])"
+                )
+                == editor_before
+            )
+            assert (
+                page.request.get(f"http://127.0.0.1:{port}/export?kind=analysis").json()
+                == export_before
+            )
+
+            page.set_viewport_size({"width": 390, "height": 844})
+            expect(preview).to_be_visible()
+            preview_box = preview.bounding_box()
+            assert preview_box is not None
+            assert preview.evaluate("node => node.scrollWidth <= node.clientWidth")
+            assert preview_box["x"] >= 0 and preview_box["x"] + preview_box["width"] <= 391
+            page.keyboard.press("Escape")
+            expect(preview).to_be_hidden()
+            expect(canvas).not_to_have_attribute(
+                "data-selected-range", f"{start_index}:{end_index}"
+            )
+
+            page.set_viewport_size({"width": 1280, "height": 900})
+            canvas.scroll_into_view_if_needed()
+            box = canvas.bounding_box()
+            assert box is not None
+            values = json.loads(canvas.get_attribute("data-period-centers") or "[]")
+            with page.expect_response(lambda response: response.url.endswith("/analysis/preview")):
+                page.mouse.move(box["x"] + values[start_index], box["y"] + box["height"] / 2)
+                page.mouse.down()
+                page.mouse.move(box["x"] + values[end_index], box["y"] + box["height"] / 2)
+                page.mouse.up()
+            expect(preview).to_be_visible()
+            page.locator("h1").click()
+            expect(preview).to_be_hidden()
+
+            evidence = page.locator("details.monthly-evidence-details")
+            expect(evidence).not_to_have_attribute("open", "")
+            expect(evidence.get_by_role("table", name="월별 거래량")).not_to_be_visible()
+            expect(evidence.get_by_role("table", name="월별 가격 중간값")).not_to_be_visible()
+            evidence.locator("summary").click()
+            expect(evidence.get_by_role("table", name="월별 거래량")).to_be_visible()
+            expect(evidence.get_by_role("table", name="월별 가격 중간값")).to_be_visible()
             browser.close()
     finally:
         server.should_exit = True

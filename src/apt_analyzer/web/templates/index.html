@@ -4,7 +4,8 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <title>{{ title }}</title>
-        <link rel="stylesheet" href="/static/assets/apt-analyzer-web.css">
+        <link rel="stylesheet"
+              href="/static/assets/apt-analyzer-web.css?v={{ asset_version }}">
     </head>
     <body>
         <main id="workspace">
@@ -532,8 +533,19 @@
                         </details>
                         <button type="submit">이 기간으로 다시 분석</button>
                     </form>
-                    <canvas id="volume-chart" aria-label="월별 유효 거래량 차트" role="img">
+                    <canvas id="volume-chart"
+                            aria-label="월별 유효 거래량 차트"
+                            aria-describedby="brush-status"
+                            role="img">
                     </canvas>
+                    <p id="brush-status" class="brush-status" aria-live="polite">차트에서 월 범위를 드래그하면 참고 미리보기가 표시됩니다.</p>
+                    <aside id="analysis-preview"
+                           class="analysis-preview"
+                           aria-label="선택 기간 참고 미리보기"
+                           tabindex="-1"
+                           aria-live="polite"
+                           hidden>
+                    </aside>
                     {% if result.trend_series %}
                         <details>
                             <summary>3개월 이동 평균 (참고 추세) 표 보기</summary>
@@ -733,45 +745,47 @@
             </section>
             {% if result and result.volume_series %}
                 <section>
-                    <h3>월별 거래량과 가격 근거</h3>
-                    <div class="table-wrap">
-                        <table>
-                            <caption>월별 거래량</caption>
-                            <tr>
-                                <th>기간</th>
-                                <th>거래량</th>
-                                <th>상태</th>
-                            </tr>
-                            {% for point in result.volume_series %}
-                                <tr>
-                                    <td>{{ point.period }}</td>
-                                    <td>{{ point.value if point.value is not none else "사용 불가" }}</td>
-                                    <td>{{ labels.get(point.coverage_status|default(point.status),point.coverage_status|default(point.status)) }} / {{ labels.get(point.period_status|default('complete'),point.period_status|default('complete')) }}</td>
-                                </tr>
-                            {% endfor %}
-                        </table>
-                    </div>
-                    {% if result.monthly_series %}
+                    <details class="monthly-evidence-details">
+                        <summary>월별 거래량·가격 원본 근거 보기 ({{ result.volume_series|length }}개월)</summary>
                         <div class="table-wrap">
                             <table>
-                                <caption>월별 가격 중간값</caption>
+                                <caption>월별 거래량</caption>
                                 <tr>
                                     <th>기간</th>
-                                    <th>중간 거래가격</th>
-                                    <th>거래 건수</th>
+                                    <th>거래량</th>
                                     <th>상태</th>
                                 </tr>
-                                {% for point in result.monthly_series %}
+                                {% for point in result.volume_series %}
                                     <tr>
                                         <td>{{ point.period }}</td>
                                         <td>{{ point.value if point.value is not none else "사용 불가" }}</td>
-                                        <td>{{ point.transaction_count if point.transaction_count is not none else "사용 불가" }}</td>
                                         <td>{{ labels.get(point.coverage_status|default(point.status),point.coverage_status|default(point.status)) }} / {{ labels.get(point.period_status|default('complete'),point.period_status|default('complete')) }}</td>
                                     </tr>
                                 {% endfor %}
                             </table>
                         </div>
-                    {% endif %}
+                        {% if result.monthly_series %}
+                            <div class="table-wrap">
+                                <table>
+                                    <caption>월별 가격 중간값</caption>
+                                    <tr>
+                                        <th>기간</th>
+                                        <th>중간 거래가격</th>
+                                        <th>거래 건수</th>
+                                        <th>상태</th>
+                                    </tr>
+                                    {% for point in result.monthly_series %}
+                                        <tr>
+                                            <td>{{ point.period }}</td>
+                                            <td>{{ point.value if point.value is not none else "사용 불가" }}</td>
+                                            <td>{{ point.transaction_count if point.transaction_count is not none else "사용 불가" }}</td>
+                                            <td>{{ labels.get(point.coverage_status|default(point.status),point.coverage_status|default(point.status)) }} / {{ labels.get(point.period_status|default('complete'),point.period_status|default('complete')) }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        {% endif %}
+                    </details>
                 </section>
             {% endif %}
             {% if result and result.subjects %}
@@ -838,7 +852,8 @@
                     </div>
                 </section>
             {% endif %}
-            <script type="module" src="/static/assets/apt-analyzer-web.js"></script>
+            <script type="module"
+                    src="/static/assets/apt-analyzer-web.js?v={{ asset_version }}"></script>
         </main>
     </body>
 </html>

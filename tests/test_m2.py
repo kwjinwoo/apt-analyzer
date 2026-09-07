@@ -175,7 +175,102 @@ def test_rolling_defaults_are_independent_of_metric_overrides() -> None:
         == "completed-calendar-month-12-month-window"
     )
     assert retention_override.retention is not None
-    assert retention_override.retention.annualization_method == "complete-calendar-year-average"
+    assert (
+        retention_override.retention.annualization_method
+        == "completed-calendar-month-12-vs-prior-12"
+    )
+
+
+def test_analyze_routes_arbitrary_non_jan_twelve_month_turnover_to_rolling() -> None:
+    overall = AnalysisPeriod(date(2024, 1, 1), date(2025, 12, 31))
+    period = AnalysisPeriod(date(2024, 2, 1), date(2025, 1, 31))
+    transactions = [
+        NormalizedTransaction(
+            "apt-1", date(2024, 6, 1), 25, Decimal("84"), TransactionType.BROKERED, False
+        )
+    ]
+    coverage = {f"{year}{month:02d}": "complete" for year in (2024, 2025) for month in range(1, 13)}
+    result = analyze(
+        transactions,
+        _context(overall),
+        turnover_period=period,
+        household=HouseholdEvidence(100, "complex", "fixture"),
+        rolling_today=date(2026, 8, 30),
+        monthly_coverage=coverage,
+        rolling_defaults=True,
+    )
+    assert result.turnover is not None
+    assert result.turnover.value == Decimal("0.01")
+    assert result.turnover.period == period
+    assert result.turnover.annualization_method == "completed-calendar-month-12-month-window"
+
+
+def test_analyze_routes_adjacent_non_jan_retention_to_rolling() -> None:
+    overall = AnalysisPeriod(date(2023, 2, 1), date(2025, 1, 31))
+    baseline = AnalysisPeriod(date(2023, 2, 1), date(2024, 1, 31))
+    comparison = AnalysisPeriod(date(2024, 2, 1), date(2025, 1, 31))
+    transactions = [
+        NormalizedTransaction(
+            "apt-1", date(2023, 6, 1), 10, Decimal("84"), TransactionType.BROKERED, False
+        ),
+        NormalizedTransaction(
+            "apt-1", date(2024, 6, 1), 20, Decimal("84"), TransactionType.BROKERED, False
+        ),
+    ]
+    coverage = {
+        f"{year}{month:02d}": "complete" for year in (2023, 2024, 2025) for month in range(1, 13)
+    }
+    result = analyze(
+        transactions,
+        _context(overall),
+        baseline_period=baseline,
+        comparison_period=comparison,
+        rolling_today=date(2026, 8, 30),
+        monthly_coverage=coverage,
+        rolling_defaults=True,
+    )
+    assert result.retention is not None
+    assert result.retention.value == Decimal("1")
+    assert result.retention.annualization_method == "completed-calendar-month-12-vs-prior-12"
+
+
+def test_analyze_marks_in_progress_exact_rolling_windows_unavailable() -> None:
+    overall = AnalysisPeriod(date(2025, 9, 1), date(2026, 8, 31))
+    period = AnalysisPeriod(date(2025, 9, 1), date(2026, 8, 31))
+    coverage = {f"{year}{month:02d}": "complete" for year in (2025, 2026) for month in range(1, 13)}
+    turnover_result = analyze(
+        [],
+        _context(overall),
+        turnover_period=period,
+        household=HouseholdEvidence(100, "complex", "fixture"),
+        rolling_today=date(2026, 8, 30),
+        monthly_coverage=coverage,
+        rolling_defaults=True,
+    ).turnover
+    assert turnover_result is not None and turnover_result.value is None
+    assert turnover_result.unavailable is not None
+    assert (
+        turnover_result.unavailable.reason == "rolling turnover requires completed calendar months"
+    )
+
+    baseline = AnalysisPeriod(date(2024, 9, 1), date(2025, 8, 31))
+    retention_result = analyze(
+        [],
+        _context(
+            AnalysisPeriod(date(2024, 9, 1), date(2026, 8, 31)),
+        ),
+        baseline_period=baseline,
+        comparison_period=period,
+        rolling_today=date(2026, 8, 30),
+        monthly_coverage=coverage,
+        rolling_defaults=True,
+    ).retention
+    assert retention_result is not None and retention_result.value is None
+    assert retention_result.unavailable is not None
+    assert (
+        retention_result.unavailable.reason
+        == "rolling retention requires completed calendar months"
+    )
 
 
 def test_yearly_and_monthly_results_keep_empty_years_and_observation_counts() -> None:

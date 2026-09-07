@@ -79,6 +79,16 @@ For a multi-year interval, the initial candidate annualization is total eligible
 
 Filtering transactions to an area group does not create an exact area-level turnover rate unless the denominator is the household count for that same area group. Until that denominator is available, distinguish whole-complex turnover from area-filtered transaction activity.
 
+An exact 12-consecutive-completed-month window uses rolling-turnover semantics;
+an adjacent completed 12-month baseline and comparison uses rolling-retention
+semantics. The non-mutating chart preview extends this with [R-027](../requirements/R-027-chart-preview-turnover.md)
+and [ADR-0013](../decisions/ADR-0013-duration-aware-chart-preview-turnover.md),
+with retention interpretation updated by [R-028](../requirements/R-028-chart-preview-retention-split.md)
+and [ADR-0014](../decisions/ADR-0014-chart-preview-retention-split.md):
+12-month selections use rolling turnover, exact 12-month multiples use an
+explicit annual average, and other whole-month selections are cumulative and
+not annualized. Other arbitrary partial-year annualization remains unresolved.
+
 ## Annual turnover rate
 
 Annual turnover uses one calendar year's eligible transaction count divided by the applicable household count. Partial-year values must not be presented as full-year turnover without an explicit and accepted annualization policy.
@@ -107,6 +117,7 @@ baseline-period annualized transaction count
 ### Interpretation constraints
 
 The result is relative to user-selected periods and is not an intrinsic property of the complex. A zero baseline cannot produce an ordinary percentage and requires an explicit result policy. The default completed-month windows and 12/24-month support thresholds are defined by [ADR-0010](../decisions/ADR-0010-completed-month-rolling-analysis.md).
+For chart preview, [R-028](../requirements/R-028-chart-preview-retention-split.md) and [ADR-0014](../decisions/ADR-0014-chart-preview-retention-split.md) retain the 12-month selected-comparison plus preceding 12-month baseline, and split a 24-month selection into first-12 baseline and last-12 comparison; other lengths are unavailable. OQ-005 remains the governing zero-baseline question.
 
 ## Completed-month rolling analysis
 

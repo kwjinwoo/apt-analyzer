@@ -229,11 +229,39 @@ def monthly_transaction_trend(
     return tuple(output)
 
 
+def _is_exact_twelve_month_period(
+    period: AnalysisPeriod | None, overall: AnalysisPeriod, today: date | None = None
+) -> bool:
+    """Return whether a period is a 12-month calendar window inside overall."""
+    return (
+        period is not None
+        and _is_twelve_calendar_month_period(period)
+        and overall.start <= period.start
+        and period.end <= overall.end
+        and (today is None or period.end < today)
+    )
+
+
+def _is_adjacent_twelve_month_period(
+    baseline: AnalysisPeriod,
+    comparison: AnalysisPeriod,
+    overall: AnalysisPeriod,
+    today: date | None = None,
+) -> bool:
+    """Return whether retention windows are adjacent, complete, and in overall."""
+    return (
+        _is_exact_twelve_month_period(baseline, overall, today)
+        and _is_exact_twelve_month_period(comparison, overall, today)
+        and baseline.end + timedelta(days=1) == comparison.start
+    )
+
+
 def rolling_turnover(
     population: TransactionPopulation,
     period: AnalysisPeriod,
     household: HouseholdEvidence,
     coverage: dict[str, str],
+    today: date | None = None,
 ) -> TurnoverResult:
     """Calculate equal-count completed-month turnover when coverage is contiguous."""
     count = len(_within(population.eligible, period))
@@ -260,6 +288,17 @@ def rolling_turnover(
             population.context,
             ROLLING_TURNOVER_METHOD,
             MetricUnavailable("unavailable", "metric period is outside overall analysis period"),
+        )
+    if today is not None and period.end >= today:
+        return TurnoverResult(
+            None,
+            None,
+            count,
+            period,
+            household,
+            population.context,
+            ROLLING_TURNOVER_METHOD,
+            MetricUnavailable("unavailable", "rolling turnover requires completed calendar months"),
         )
     if not _usable_span(period, coverage):
         return TurnoverResult(
@@ -322,11 +361,85 @@ def rolling_turnover(
     )
 
 
+def preview_turnover(
+    population: TransactionPopulation,
+    period: AnalysisPeriod,
+    household: HouseholdEvidence,
+    coverage: dict[str, str],
+    today: date | None = None,
+) -> TurnoverResult:
+    """Calculate duration-aware turnover for a non-mutating chart preview.
+
+    Twelve-month multiples use an explicit per-year average; other complete
+    whole-month periods are cumulative. All periods still require compatible
+    persisted coverage and household evidence.
+    """
+    count = len(_within(population.eligible, period))
+    month_count = (
+        (period.end.year - period.start.year) * 12 + period.end.month - period.start.month + 1
+    )
+    if not _contained_in_context(period, population.context.period):
+        reason = "metric period is outside overall analysis period"
+    elif today is not None and period.end >= today:
+        reason = "rolling turnover requires completed calendar months"
+    elif not _usable_span(period, coverage):
+        reason = "required monthly coverage is incomplete"
+    elif household.count is None or household.count <= 0:
+        reason = "household denominator is missing or invalid"
+    elif not household.source or not household.source.strip():
+        reason = "household source evidence is missing"
+    else:
+        expected_scope = (
+            "complex"
+            if population.context.area_selection.group is None
+            else population.context.area_selection.group.key
+        )
+        if household.scope != expected_scope:
+            reason = "household denominator scope does not match area selection"
+        else:
+            divisor = (
+                Decimal(month_count // 12)
+                if month_count > 12 and month_count % 12 == 0
+                else Decimal(1)
+            )
+            method = (
+                ROLLING_TURNOVER_METHOD
+                if month_count == 12
+                else "preview-calendar-month-average"
+                if month_count % 12 == 0
+                else "preview-cumulative-month-turnover"
+            )
+            return TurnoverResult(
+                Decimal(count) / divisor / Decimal(household.count),
+                Decimal(count) / divisor,
+                count,
+                period,
+                household,
+                population.context,
+                method,
+            )
+    return TurnoverResult(
+        None,
+        None,
+        count,
+        period,
+        household,
+        population.context,
+        ROLLING_TURNOVER_METHOD
+        if month_count == 12
+        else "preview-calendar-month-average"
+        if month_count % 12 == 0
+        else "preview-cumulative-month-turnover",
+        MetricUnavailable("unavailable", reason),
+    )
+
+
 def rolling_retention(
     population: TransactionPopulation,
     baseline_period: AnalysisPeriod,
     comparison_period: AnalysisPeriod,
     coverage: dict[str, str],
+    today: date | None = None,
 ) -> RetentionResult:
     """Compare equal 12-month counts when both contiguous spans are usable."""
     baseline_count = len(_within(population.eligible, baseline_period))
@@ -345,6 +458,10 @@ def rolling_retention(
     ) or not _contained_in_context(comparison_period, population.context.period):
         unavailable = MetricUnavailable(
             "unavailable", "metric period is outside overall analysis period"
+        )
+    elif today is not None and (baseline_period.end >= today or comparison_period.end >= today):
+        unavailable = MetricUnavailable(
+            "unavailable", "rolling retention requires completed calendar months"
         )
     elif not _usable_span(baseline_period, coverage) or not _usable_span(
         comparison_period, coverage
@@ -697,18 +814,20 @@ def analyze(
     annual_household = household or HouseholdEvidence(None, "complex", None)
     if rolling_defaults and rolling_today is not None and monthly_coverage is not None:
         rolling_periods = derive_completed_month_periods(context.period, today=rolling_today)
-        if rolling_periods.turnover is not None and turnover_period == rolling_periods.turnover:
+        if turnover_period is not None and (
+            turnover_period == rolling_periods.turnover
+            or _is_exact_twelve_month_period(turnover_period, context.period)
+        ):
             turnover_result = rolling_turnover(
-                population, rolling_periods.turnover, annual_household, monthly_coverage
+                population, turnover_period, annual_household, monthly_coverage, rolling_today
             )
         if (
-            rolling_periods.turnover is not None
-            and rolling_periods.baseline is not None
-            and baseline_period == rolling_periods.baseline
-            and comparison_period == rolling_periods.turnover
+            baseline_period is not None
+            and comparison_period is not None
+            and _is_adjacent_twelve_month_period(baseline_period, comparison_period, context.period)
         ):
             retention_result = rolling_retention(
-                population, rolling_periods.baseline, rolling_periods.turnover, monthly_coverage
+                population, baseline_period, comparison_period, monthly_coverage, rolling_today
             )
     annual_periods = _complete_year_periods(context.period)
     annual_results = tuple(

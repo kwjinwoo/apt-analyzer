@@ -3,7 +3,7 @@ title: Turnover Rate
 type: metric
 role: topic
 status: active
-updated: 2026-08-31
+updated: 2026-09-03
 aliases:
   - Apartment turnover
 tags:
@@ -27,6 +27,13 @@ Annualization makes periods comparable only when boundary and duration semantics
 
 The accepted [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) defines the single-analysis default anchored by calendar boundaries at the latest fully contained month, using the 12 consecutive calendar months ending there, with that entire span wholly inside the overall interval, and a valid applicable household denominator. Every month needs successful or valid-empty coverage; any gap makes the default unavailable rather than selecting an earlier month. Whole-complex K-APT household evidence can be persisted during explicit apartment-detail selection or refresh and reused by offline analysis; it is not borrowed for an area-filtered numerator.
 
+The superseded R-026 chart preview is replaced by [R-027](../../docs/requirements/R-027-chart-preview-turnover.md),
+uses selected-period turnover for 12 months, an explicitly labelled annual
+average for exact 12-month multiples, and cumulative (not annualized) turnover
+for other valid whole-month lengths. The preview remains separate from the
+official result; [ADR-0013](../../docs/decisions/ADR-0013-duration-aware-chart-preview-turnover.md)
+records this extension.
+
 ## Graph connections
 
 - Uses eligible counts from [Transaction population](../data/transaction-population.md).
@@ -41,6 +48,8 @@ The accepted [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-an
 - [R-009: Annual turnover rate](../../docs/requirements/R-009-annual-turnover-rate.md)
 - [R-019: Visible analysis context](../../docs/requirements/R-019-analysis-context.md)
 - [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
+- [R-026: Non-mutating chart period preview](../../docs/requirements/R-026-chart-preview.md)
+- [R-027: Duration-aware chart preview turnover](../../docs/requirements/R-027-chart-preview-turnover.md)
 
 ## Decisions and open questions
 
@@ -60,6 +69,11 @@ The accepted [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-an
 ## Verify in the repository
 
 [`turnover`](../../src/apt_analyzer/analytics.py) retains the explicit `complete-calendar-year-average` path for legacy flows. Single-apartment web analysis uses completed-month rolling defaults and can use persisted K-APT whole-complex household evidence. Representative evidence is in [`test_m2.py`](../../tests/test_m2.py) and [`test_web.py`](../../tests/test_web.py); area-specific denominator policy remains unresolved.
+An exact 12-month completed-month preview uses the rolling method; exact
+multi-year selections use the preview annual-average method and other whole
+month selections use the preview cumulative method;
+representative endpoint and browser regressions are named in
+[R-027](../../docs/requirements/R-027-chart-preview-turnover.md).
 
 ## Related pages
 

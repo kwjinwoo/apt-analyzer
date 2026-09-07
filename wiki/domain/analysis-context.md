@@ -3,7 +3,7 @@ title: Analysis Context
 type: domain
 role: topic
 status: active
-updated: 2026-08-31
+updated: 2026-09-03
 aliases:
   - Metric context
   - Analysis configuration
@@ -30,6 +30,11 @@ Single-apartment human results separate an always-visible comparable core-metric
 
 [R-024](../../docs/requirements/R-024-period-driven-analysis.md) and [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) add accepted period-driven defaults: an explicit overall interval, visible completed-month derivation methods, and explicit overrides. The rolling anchor is chosen by calendar containment; required turnover/retention spans are consecutive and cannot skip months with missing or failed coverage. Overrides remain subject to metric validity rules and may be unavailable. The defaults do not resolve arbitrary partial-year annualization.
 
+[R-026](../../docs/requirements/R-026-chart-preview.md) adds an exploratory
+selection context nested inside the current official context. It reuses the
+official apartment, area, inclusion, household, coverage, and overall-period
+evidence, but its values do not replace the official result or export.
+
 ## Graph connections
 
 - Identifies the subject through [Apartment identity](apartment-identity.md).
@@ -46,6 +51,7 @@ Single-apartment human results separate an always-visible comparable core-metric
 - [R-016: Apartment comparison](../../docs/requirements/R-016-apartment-comparison.md)
 - [R-019: Visible analysis context](../../docs/requirements/R-019-analysis-context.md)
 - [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
+- [R-026: Non-mutating chart period preview](../../docs/requirements/R-026-chart-preview.md)
 
 ## Decisions and open questions
 

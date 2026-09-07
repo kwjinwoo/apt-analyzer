@@ -3,7 +3,7 @@ title: Maximum Drawdown
 type: metric
 role: topic
 status: active
-updated: 2026-08-30
+updated: 2026-09-03
 aliases:
   - MDD
   - Price drawdown
@@ -30,6 +30,10 @@ R-024 also requires monthly MDD evidence to follow the overall interval while
 making any completed-month rolling default boundaries visible; this does not
 change the observed, gap-preserving price-series semantics.
 
+R-026 permits any valid whole-month chart selection to preview MDD using that
+same observed series. The preview carries the selected peak and trough evidence
+but does not replace the official result.
+
 ## Graph connections
 
 - Operates on [Price-series evidence](../data/price-series-evidence.md).
@@ -46,6 +50,7 @@ change the observed, gap-preserving price-series semantics.
 - [R-018: Outlier-impact inspection](../../docs/requirements/R-018-outlier-impact.md)
 - [R-019: Visible analysis context](../../docs/requirements/R-019-analysis-context.md)
 - [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
+- [R-026: Non-mutating chart period preview](../../docs/requirements/R-026-chart-preview.md)
 
 ## Decisions and open questions
 

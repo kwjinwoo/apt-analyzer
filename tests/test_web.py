@@ -21,6 +21,7 @@ from apt_analyzer.web import (
     _ENDPOINT_TO_API_SERVICE,
     MissingKeyService,
     _default_service,
+    _static_asset_version,
     create_app,
 )
 
@@ -91,6 +92,26 @@ class HouseholdSearch(FakeSearch):
         )
         apartment = self.apartments[selected.source_id]
         return enriched, IdentityResolution(ResolutionStatus.RESOLVED, (enriched,), apartment)
+
+
+def test_static_asset_version_changes_with_bundle_content_and_is_rendered(tmp_path) -> None:
+    static_directory = tmp_path / "static"
+    assets = static_directory / "assets"
+    assets.mkdir(parents=True)
+    script = assets / "apt-analyzer-web.js"
+    stylesheet = assets / "apt-analyzer-web.css"
+    script.write_text("old bundle", encoding="utf-8")
+    stylesheet.write_text("old styles", encoding="utf-8")
+    old_version = _static_asset_version(static_directory)
+
+    script.write_text("new direct-drag bundle", encoding="utf-8")
+
+    assert _static_asset_version(static_directory) != old_version
+    app = create_app(search_service=FakeSearch(), store=SQLiteStore(":memory:"))
+    response = TestClient(app).get("/")
+    version = app.state.asset_version
+    assert f"/static/assets/apt-analyzer-web.js?v={version}" in response.text
+    assert f"/static/assets/apt-analyzer-web.css?v={version}" in response.text
 
 
 def _save_two_year_metric_evidence(store: SQLiteStore, apartment: Apartment) -> None:
@@ -207,6 +228,304 @@ def test_selected_kapt_households_are_persisted_and_used_offline_for_percent_met
         "retention": {"unit": "%", "meaning": "비교 기간 거래량 ÷ 기준 기간 거래량"},
         "mdd": {"unit": "%", "meaning": "가격 시계열 최대낙폭"},
     }
+
+
+def test_analysis_preview_uses_offline_context_without_mutating_official_result(
+    tmp_path,
+) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    store.save_transaction(
+        NormalizedTransaction(
+            "a",
+            date(2024, 3, 28),
+            75_000_000,
+            Decimal("84"),
+            TransactionType.DIRECT,
+            False,
+            source_name="MOLIT apartment sale transactions",
+            source_record_id="excluded-preview-direct",
+        )
+    )
+    store.save_transaction(
+        NormalizedTransaction(
+            "a",
+            date(2024, 4, 28),
+            80_000_000,
+            Decimal("59"),
+            TransactionType.BROKERED,
+            False,
+            source_name="MOLIT apartment sale transactions",
+            source_record_id="excluded-preview-area",
+        )
+    )
+    app = create_app(
+        search_service=service,
+        store=store,
+        analysis_today=lambda: date(2025, 1, 15),
+    )
+    client = TestClient(app)
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-84",
+            "transaction_types": ["brokered"],
+            "household_count": "100",
+            "household_scope": "floor-84",
+            "household_source": "fixture",
+        },
+    )
+    official_before = client.get("/export?kind=analysis").json()
+
+    response = client.post(
+        "/analysis/preview",
+        data={"start": "2024-01-01", "end": "2024-12-31"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == {
+        "selection": {
+            "start": "2024-01-01",
+            "end": "2024-12-31",
+            "label": "2024.01 ~ 2024.12",
+            "months": 12,
+        },
+        "volume": {
+            "value": 24,
+            "display": "24건",
+            "unit": "건",
+            "evidence": "선택 기간 유효 거래 24건",
+        },
+        "turnover": {
+            "status": "available",
+            "value": "0.24",
+            "display": "24.00%",
+            "unit": "%",
+            "evidence": "24건 / 100세대",
+            "reason": None,
+            "method": "completed-calendar-month-12-month-window",
+        },
+        "retention": {
+            "status": "available",
+            "value": "2",
+            "display": "200.00%",
+            "unit": "%",
+            "evidence": "2024.01~2024.12 24건 / 2023.01~2023.12 12건 (비교 / 기준)",
+            "reason": None,
+            "method": "completed-calendar-month-12-vs-prior-12",
+        },
+        "mdd": {
+            "status": "available",
+            "value": "-0.5",
+            "display": "-50.00%",
+            "unit": "%",
+            "evidence": "100,000,000원 → 50,000,000원 (2024-01 → 2024-02)",
+            "reason": None,
+            "method": "observed monthly median",
+        },
+    }
+    assert client.get("/export?kind=analysis").json() == official_before
+    assert service.retrieve_calls == 0
+
+
+def test_analysis_preview_uses_cumulative_turnover_and_unavailable_retention(
+    tmp_path,
+) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(
+            search_service=service,
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "transaction_types": ["brokered"],
+        },
+    )
+
+    preview = client.post(
+        "/analysis/preview",
+        data={"start": "2024-01-01", "end": "2024-06-30"},
+    )
+
+    assert preview.status_code == 200
+    payload = preview.json()
+    assert payload["selection"]["months"] == 6
+    assert payload["volume"]["value"] == 12
+    assert payload["turnover"]["status"] == "available"
+    assert payload["turnover"]["value"] == "0.12"
+    assert payload["turnover"]["method"] == "preview-cumulative-month-turnover"
+    assert payload["turnover"]["evidence"] == "12건 누적 / 100세대"
+    assert payload["retention"] == {
+        "status": "unavailable",
+        "value": None,
+        "display": "계산 불가",
+        "unit": "%",
+        "evidence": None,
+        "reason": "거래유지율은 선택 기간과 직전 기간이 각각 12개월이어야 합니다",
+        "method": "completed-calendar-month-12-vs-prior-12",
+    }
+    assert payload["mdd"]["display"] == "-50.00%"
+    assert payload["mdd"]["method"] == "observed monthly median"
+
+
+def test_analysis_preview_uses_annual_average_for_complete_24_month_selection(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(search_service=service, store=store, analysis_today=lambda: date(2025, 1, 15))
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post(
+        "/analysis",
+        data={"start": "2023-01-01", "end": "2024-12-31", "transaction_types": ["brokered"]},
+    )
+    response = client.post("/analysis/preview", data={"start": "2023-01-01", "end": "2024-12-31"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["selection"]["months"] == 24
+    assert payload["turnover"] == {
+        "status": "available",
+        "value": "0.18",
+        "display": "18.00%",
+        "unit": "%",
+        "evidence": "36건 ÷ 2년 / 100세대",
+        "reason": None,
+        "method": "preview-calendar-month-average",
+    }
+
+
+def test_analysis_preview_splits_24_month_retention_into_baseline_and_comparison(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(search_service=service, store=store, analysis_today=lambda: date(2025, 1, 15))
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post("/analysis", data={"start": "2023-01-01", "end": "2024-12-31"})
+    payload = client.post(
+        "/analysis/preview", data={"start": "2023-01-01", "end": "2024-12-31"}
+    ).json()
+    assert payload["retention"]["value"] == "2"
+    assert payload["retention"]["display"] == "200.00%"
+    assert (
+        payload["retention"]["evidence"]
+        == "2024.01~2024.12 24건 / 2023.01~2023.12 12건 (비교 / 기준)"
+    )
+
+
+def test_analysis_preview_rejects_incompatible_household_scope_for_duration(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(search_service=service, store=store, analysis_today=lambda: date(2025, 1, 15))
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-84",
+            "household_count": "100",
+            "household_scope": "complex",
+            "household_source": "fixture",
+        },
+    )
+    payload = client.post(
+        "/analysis/preview", data={"start": "2023-01-01", "end": "2024-12-31"}
+    ).json()
+    assert payload["turnover"]["status"] == "unavailable"
+    assert payload["turnover"]["reason"] == "세대수 분모 범위가 면적 선택과 일치하지 않습니다"
+
+
+def test_analysis_preview_preserves_coverage_and_completion_reasons(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    store._connection.execute(
+        "DELETE FROM monthly_coverage WHERE apartment_id=? AND month=?",
+        ("a", "202401"),
+    )
+    store._connection.commit()
+    client = TestClient(
+        create_app(search_service=service, store=store, analysis_today=lambda: date(2025, 1, 15))
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post("/analysis", data={"start": "2023-01-01", "end": "2024-12-31"})
+    missing = client.post(
+        "/analysis/preview", data={"start": "2023-01-01", "end": "2024-12-31"}
+    ).json()
+    assert missing["turnover"]["reason"] == "필요한 월별 근거가 완전하지 않습니다"
+    partial_store = SQLiteStore(tmp_path / "partial.db")
+    _save_two_year_metric_evidence(partial_store, Apartment("a", "Alpha"))
+    incomplete = TestClient(
+        create_app(
+            search_service=service,
+            store=partial_store,
+            analysis_today=lambda: date(2024, 7, 15),
+        )
+    )
+    incomplete.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    incomplete.post("/select", data={"source_id": "a"})
+    incomplete.post("/analysis", data={"start": "2023-01-01", "end": "2024-12-31"})
+    partial = incomplete.post(
+        "/analysis/preview", data={"start": "2024-01-01", "end": "2024-07-31"}
+    ).json()
+    assert partial["turnover"]["reason"] == "거래회전율은 완료된 달력 월만 사용할 수 있습니다"
+
+
+def test_analysis_preview_rejects_non_month_boundaries_and_outside_period(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(create_app(search_service=service, store=store))
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "transaction_types": ["brokered"],
+        },
+    )
+
+    boundary = client.post(
+        "/analysis/preview",
+        data={"start": "2024-01-02", "end": "2024-12-31"},
+    )
+    outside = client.post(
+        "/analysis/preview",
+        data={"start": "2022-01-01", "end": "2022-12-31"},
+    )
+
+    assert boundary.status_code == 422
+    assert boundary.json()["error"] == "월의 첫날부터 마지막 날까지 선택해 주세요."
+    assert outside.status_code == 422
+    assert outside.json()["error"] == "전체 분석 기간 안에서 선택해 주세요."
 
 
 def test_explicit_household_refresh_preserves_last_good_evidence_on_failure(tmp_path) -> None:

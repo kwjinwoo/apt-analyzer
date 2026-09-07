@@ -307,6 +307,69 @@ th {
 .context-details table {
   min-width: 0;
 }
+.brush-status {
+  min-height: 1.5rem;
+  margin: 0.45rem 0;
+  color: #52667d;
+  font-size: 0.9rem;
+}
+.analysis-preview {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0.65rem 0 1rem;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+  background: linear-gradient(135deg, #f5f9ff, #fff);
+  border: 1px solid #9fc0e5;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1.2rem rgb(29 95 170 / 10%);
+}
+.analysis-preview[hidden] {
+  display: none;
+}
+.analysis-preview h3,
+.analysis-preview p {
+  margin: 0;
+}
+.analysis-preview .preview-period {
+  margin-top: 0.25rem;
+  color: #52667d;
+}
+.preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.85rem 0 0;
+}
+.preview-metric {
+  min-width: 0;
+  padding: 0.75rem;
+  background: #fff;
+  border: 1px solid #d8e1ec;
+  border-radius: 0.55rem;
+}
+.preview-metric dt {
+  color: #52667d;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.preview-metric dd {
+  margin: 0.2rem 0 0;
+  color: #14283f;
+  font-size: 1.08rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.preview-metric small {
+  display: block;
+  margin-top: 0.25rem;
+  color: #52667d;
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+.monthly-evidence-details {
+  margin-top: 1rem;
+}
 details {
   grid-column: 1 / -1;
   border: 1px solid #d8e1ec;
@@ -325,6 +388,11 @@ canvas {
   width: 100%;
   min-height: 260px;
   margin-top: 1rem;
+}
+#volume-chart {
+  cursor: crosshair;
+  touch-action: pan-y;
+  user-select: none;
 }
 pre {
   max-height: 20rem;
@@ -363,6 +431,9 @@ pre {
   .metric-summary {
     overflow: visible;
     max-width: 100%;
+  }
+  .preview-metrics {
+    grid-template-columns: 1fr;
   }
   .metric-summary thead {
     display: none;

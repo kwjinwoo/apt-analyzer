@@ -5,8 +5,32 @@ import {
   volumeChartConfiguration,
 } from "./chartConfig";
 import { chartPointsFromResult } from "./chartSeries";
+import {
+  inclusiveMonthCount,
+  monthRangeDates,
+  normalizeIndexRange,
+  selectionLabel,
+} from "./periodBrush";
 
 describe("local web foundation", () => {
+  it("normalizes reverse drag indices and derives whole-month request dates", () => {
+    expect(normalizeIndexRange(11, 2)).toEqual([2, 11]);
+    expect(monthRangeDates("2022-08", "2021-09")).toEqual({
+      start: "2021-09-01",
+      end: "2022-08-31",
+    });
+    expect(monthRangeDates("2024-02", "2024-02")).toEqual({
+      start: "2024-02-01",
+      end: "2024-02-29",
+    });
+  });
+
+  it("formats an inclusive direct-preview range", () => {
+    expect(inclusiveMonthCount("2021-09", "2022-08")).toBe(12);
+    expect(selectionLabel("2022-08", "2021-09")).toBe(
+      "2021.09 ~ 2022.08 · 12개월",
+    );
+  });
   it("preserves expanded monthly null gaps", () => {
     expect(
       chartPointsFromResult({

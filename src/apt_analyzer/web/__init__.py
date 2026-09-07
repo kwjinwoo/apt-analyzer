@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
 import os
 from collections.abc import Callable
@@ -28,9 +29,13 @@ from apt_analyzer.analytics import (
     DataCoverageStatus,
     HouseholdEvidence,
     analyze,
+    build_population,
     derive_completed_month_periods,
     discover_area_groups,
+    maximum_drawdown,
     monthly_transaction_trend,
+    preview_turnover,
+    rolling_retention,
 )
 from apt_analyzer.apartment_data import (
     KAPT_DETAIL_ENDPOINT,
@@ -123,7 +128,9 @@ _UI_LABELS = {
     "baseline transaction count is zero": "기준 기간 거래량이 0입니다",
     "required monthly coverage is incomplete": "필요한 월별 근거가 완전하지 않습니다",
     "rolling turnover requires exactly 12 complete calendar months": "거래회전율은 완전한 연속 12개월이 필요합니다",
+    "rolling turnover requires completed calendar months": "거래회전율은 완료된 달력 월만 사용할 수 있습니다",
     "rolling retention requires adjacent 12-month calendar windows": "거래유지율은 인접한 12개월 구간 두 개가 필요합니다",
+    "rolling retention requires completed calendar months": "거래유지율은 완료된 달력 월만 사용할 수 있습니다",
     "fewer than two observed months": "관측된 월이 두 개 미만입니다",
     "metric period is outside overall analysis period": "지표 기간이 전체 분석 기간 밖에 있습니다",
     "metric unavailable": "사용 불가",
@@ -320,6 +327,7 @@ def create_app(
     static_directory = Path(__file__).parent / "static"
     if static_directory.exists():
         app.mount("/static", StaticFiles(directory=static_directory), name="static")
+    app.state.asset_version = _static_asset_version(static_directory)
     templates = Jinja2Templates(directory=_TEMPLATE_DIRECTORY)
     workspace = Workspace()
     app.state.workspace = workspace
@@ -866,6 +874,195 @@ def create_app(
         }
         return _page(request, templates, workspace, (), app.state.last_result)
 
+    @app.post("/analysis/preview")
+    def _analysis_preview(  # pyright: ignore[reportUnusedFunction]
+        start: str = Form(...), end: str = Form(...)
+    ) -> JSONResponse:
+        """Return a non-mutating preview from the official persisted analysis context."""
+        current = getattr(app.state, "last_result", None)
+        try:
+            selected_start = date.fromisoformat(start)
+            selected_end = date.fromisoformat(end)
+            selected_period = AnalysisPeriod(selected_start, selected_end)
+        except ValueError:
+            return JSONResponse({"error": "선택 기간을 확인해 주세요."}, status_code=422)
+        if (
+            selected_start.day != 1
+            or selected_end.day != calendar.monthrange(selected_end.year, selected_end.month)[1]
+        ):
+            return JSONResponse(
+                {"error": "월의 첫날부터 마지막 날까지 선택해 주세요."}, status_code=422
+            )
+        if not isinstance(current, dict):
+            return JSONResponse({"error": "먼저 분석을 실행해 주세요."}, status_code=409)
+        current = cast(dict[str, object], current)
+        if workspace.apartment is None:
+            return JSONResponse({"error": "먼저 분석을 실행해 주세요."}, status_code=409)
+        ui_context = cast(dict[str, object], current.get("ui_context", {}))
+        overall_value = cast(dict[str, str], ui_context.get("overall_period", {}))
+        try:
+            overall = AnalysisPeriod(
+                date.fromisoformat(overall_value["start"]),
+                date.fromisoformat(overall_value["end"]),
+            )
+        except KeyError, ValueError:
+            return JSONResponse({"error": "먼저 분석을 실행해 주세요."}, status_code=409)
+        if not (overall.start <= selected_start and selected_end <= overall.end):
+            return JSONResponse({"error": "전체 분석 기간 안에서 선택해 주세요."}, status_code=422)
+        transactions = owned_store.load_transactions(workspace.apartment.internal_id, overall)
+        area_group_key = str(ui_context.get("area_group_key", "all"))
+        area_group = (
+            next(
+                (item for item in discover_area_groups(transactions) if item.key == area_group_key),
+                None,
+            )
+            if area_group_key != "all"
+            else None
+        )
+        if area_group_key != "all" and area_group is None:
+            return JSONResponse(
+                {"error": "현재 분석의 면적 그룹 근거를 찾을 수 없습니다."}, status_code=409
+            )
+        policy = cast(dict[str, object], ui_context.get("inclusion_policy", {}))
+        types = frozenset(
+            TransactionType(value) for value in cast(list[str], policy.get("transaction_types", []))
+        )
+        context = AnalysisContext(
+            workspace.apartment,
+            overall,
+            AreaSelection.all() if area_group is None else AreaSelection.for_group(area_group),
+            TransactionInclusionPolicy(bool(policy.get("include_cancelled", False)), types),
+        )
+        coverage = {
+            str(key): str(value)
+            for key, value in cast(dict[object, object], current.get("coverage", {})).items()
+        }
+        population = build_population(transactions, context)
+        household_value = cast(dict[str, object], ui_context.get("household", {}))
+        household = HouseholdEvidence(
+            cast(int | None, household_value.get("count")),
+            str(household_value.get("scope", "complex")),
+            cast(str | None, household_value.get("source")),
+        )
+        selected_month_count = len(months(selected_period))
+        turnover_result = preview_turnover(
+            population, selected_period, household, coverage, today()
+        )
+        turnover_method = turnover_result.annualization_method
+        if selected_month_count == 24:
+            split_index = selected_start.year * 12 + selected_start.month - 1 + 11
+            split_year, split_month_index = divmod(split_index, 12)
+            split_month = split_month_index + 1
+            baseline_start = selected_start
+            baseline_end = date(
+                split_year, split_month, calendar.monthrange(split_year, split_month)[1]
+            )
+            comparison_start = baseline_end + timedelta(days=1)
+            comparison_period = AnalysisPeriod(comparison_start, selected_end)
+        else:
+            baseline_end = selected_start - timedelta(days=1)
+            baseline_start = date(selected_start.year - 1, selected_start.month, selected_start.day)
+            comparison_period = selected_period
+        retention_result = rolling_retention(
+            population,
+            AnalysisPeriod(baseline_start, baseline_end),
+            comparison_period,
+            coverage,
+            today(),
+        )
+        mdd_result = maximum_drawdown(population, selected_period)
+        selected_count = sum(
+            1 for item in population.eligible if selected_period.includes(item.contract_date)
+        )
+
+        def metric_payload(
+            value: Decimal | None,
+            evidence: str | None,
+            unavailable_reason: str | None,
+            method: str = "",
+        ) -> dict[str, str | None]:
+            return {
+                "status": "available" if value is not None else "unavailable",
+                "value": None if value is None else str(value),
+                "display": "계산 불가" if value is None else _format_percentage(value),
+                "unit": "%",
+                "evidence": evidence if value is not None else None,
+                "method": method,
+                "reason": None
+                if unavailable_reason is None
+                else _UI_LABELS.get(unavailable_reason, unavailable_reason),
+            }
+
+        turnover_reason = (
+            None if turnover_result.unavailable is None else turnover_result.unavailable.reason
+        )
+        turnover_evidence = None
+        if turnover_result.value is not None:
+            if turnover_method == "preview-calendar-month-average":
+                turnover_evidence = (
+                    f"{turnover_result.eligible_count}건 ÷ "
+                    f"{selected_month_count // 12}년 / {household.count}세대"
+                )
+            elif turnover_method == "preview-cumulative-month-turnover":
+                turnover_evidence = (
+                    f"{turnover_result.eligible_count}건 누적 / {household.count}세대"
+                )
+            else:
+                turnover_evidence = f"{turnover_result.eligible_count}건 / {household.count}세대"
+        retention_reason = (
+            None if retention_result.unavailable is None else retention_result.unavailable.reason
+        )
+        if selected_month_count not in {12, 24}:
+            retention_reason = "거래유지율은 선택 기간과 직전 기간이 각각 12개월이어야 합니다"
+        mdd_reason = None if mdd_result.unavailable is None else mdd_result.unavailable.reason
+        return JSONResponse(
+            {
+                "selection": {
+                    "start": start,
+                    "end": end,
+                    "label": (f"{selected_start:%Y.%m} ~ {selected_end:%Y.%m}"),
+                    "months": len(months(selected_period)),
+                },
+                "volume": {
+                    "value": selected_count,
+                    "display": f"{selected_count}건",
+                    "unit": "건",
+                    "evidence": f"선택 기간 유효 거래 {selected_count}건",
+                },
+                "turnover": metric_payload(
+                    turnover_result.value,
+                    turnover_evidence,
+                    turnover_reason,
+                    turnover_method,
+                ),
+                "retention": metric_payload(
+                    retention_result.value,
+                    (
+                        f"{retention_result.comparison_period.start:%Y.%m}~"
+                        f"{retention_result.comparison_period.end:%Y.%m} "
+                        f"{retention_result.comparison_count}건 / "
+                        f"{retention_result.baseline_period.start:%Y.%m}~"
+                        f"{retention_result.baseline_period.end:%Y.%m} "
+                        f"{retention_result.baseline_count}건 (비교 / 기준)"
+                    ),
+                    retention_reason,
+                    ROLLING_RETENTION_METHOD,
+                ),
+                "mdd": metric_payload(
+                    mdd_result.value,
+                    (
+                        f"{_format_krw(mdd_result.peak.median_krw)} → "
+                        f"{_format_krw(mdd_result.trough.median_krw)} "
+                        f"({mdd_result.peak.month} → {mdd_result.trough.month})"
+                    )
+                    if mdd_result.peak is not None and mdd_result.trough is not None
+                    else None,
+                    mdd_reason,
+                    "observed monthly median",
+                ),
+            }
+        )
+
     @app.get("/export")
     def export(kind: str = "analysis") -> JSONResponse:
         key = (
@@ -1276,8 +1473,19 @@ def _page(
             },
             "format_percentage": _format_percentage,
             "format_krw": _format_krw,
+            "asset_version": request.app.state.asset_version,
         },
     )
+
+
+def _static_asset_version(static_directory: Path) -> str:
+    """Return a content version that invalidates stale local web bundles."""
+    digest = hashlib.sha256()
+    for name in ("apt-analyzer-web.css", "apt-analyzer-web.js"):
+        path = static_directory / "assets" / name
+        digest.update(name.encode())
+        digest.update(path.read_bytes() if path.exists() else b"missing")
+    return digest.hexdigest()[:12]
 
 
 def _format_percentage(value: str | float | Decimal | int | None) -> str:
