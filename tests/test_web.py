@@ -12,6 +12,8 @@ from apt_analyzer.apartment_data import (
     MOLIT_SALE_ENDPOINT,
     ApartmentCandidate,
     ApartmentDataService,
+    ApartmentProfile,
+    AreaHouseholdBand,
     IdentityResolution,
     ResolutionStatus,
 )
@@ -21,6 +23,7 @@ from apt_analyzer.web import (
     _ENDPOINT_TO_API_SERVICE,
     MissingKeyService,
     _default_service,
+    _profile_age,
     _static_asset_version,
     create_app,
 )
@@ -72,6 +75,8 @@ class HouseholdSearch(FakeSearch):
     def __init__(self, household_count: int = 1842) -> None:
         super().__init__()
         self.household_count = household_count
+        self.profile_buildings = 3
+        self.profile_highest_floor = 20
         self.resolve_calls = 0
         self.fail = False
 
@@ -89,6 +94,22 @@ class HouseholdSearch(FakeSearch):
             selected.road_address,
             self.household_count,
             "K-APT apartment basic information",
+            ApartmentProfile(
+                buildings=self.profile_buildings,
+                highest_floor=self.profile_highest_floor,
+                approval_date=date(1999, 5, 3),
+                heating="지역난방",
+                hall_type="혼합식",
+                builder="한신공영",
+                developer="한국토지주택공사 LH",
+                management="위탁관리",
+                sale_type="분양",
+                area_bands=(
+                    AreaHouseholdBand("≤60㎡", 80),
+                    AreaHouseholdBand(">60–85㎡", 20),
+                    AreaHouseholdBand(">85–135㎡", 0),
+                ),
+            ),
         )
         apartment = self.apartments[selected.source_id]
         return enriched, IdentityResolution(ResolutionStatus.RESOLVED, (enriched,), apartment)
@@ -168,6 +189,54 @@ def test_interest_routes_persist_idempotently_and_restore_without_comparison_mem
     assert restarted.state.workspace.apartments == {}
 
 
+def test_saved_interest_selection_and_analysis_load_profile_without_resolve(tmp_path):
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(
+            search_service=service,
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    client.post("/interests/save")
+    profile_before = store.load_profile("a")
+    assert profile_before is not None
+
+    service.resolve_calls = 0
+    selected = client.post("/interests/select", data={"apartment_id": "a"})
+    analyzed = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "transaction_types": ["brokered"],
+        },
+    )
+
+    assert selected.status_code == analyzed.status_code == 200
+    assert service.resolve_calls == 0
+    assert store.load_profile("a") == profile_before
+
+
+def test_profile_household_atomic_save_rejects_invalid_evidence_without_partial_write(tmp_path):
+    store = SQLiteStore(tmp_path / "data.db")
+    store.save_profile_and_household(
+        "a", ApartmentProfile(buildings=3), 100, household_source="fixture", profile_source="K-APT"
+    )
+    with pytest.raises(ValueError, match="household count must be positive"):
+        store.save_profile_and_household(
+            "a", ApartmentProfile(buildings=9), 0, household_source="bad", profile_source="K-APT"
+        )
+    evidence = store.load_household_evidence("a")
+    profile = store.load_profile("a")
+    assert evidence is not None and evidence.count == 100
+    assert profile is not None and profile.profile.buildings == 3
+
+
 def test_selected_kapt_households_are_persisted_and_used_offline_for_percent_metrics(
     tmp_path,
 ) -> None:
@@ -220,6 +289,33 @@ def test_selected_kapt_households_are_persisted_and_used_offline_for_percent_met
     assert "-50.00%" in analyzed.text
     assert "100%는 동일" in analyzed.text
     payload = client.get("/export?kind=analysis").json()
+    assert payload["complex_profile"]["apartment"] == {
+        "id": "a",
+        "name": "Alpha",
+        "source_id": "a",
+        "road_address": "Alpha road",
+        "lot_address": "Alpha lot",
+    }
+    assert payload["complex_profile"]["profile"]["buildings"] == 3
+    assert payload["complex_profile"]["profile"]["approval_date"] == "1999-05-03"
+    assert payload["complex_profile"]["profile"]["heating"] == "지역난방"
+    assert payload["complex_profile"]["profile"]["area_bands"] == [
+        {"label": "≤60㎡", "count": 80, "share_percent": "80.00"},
+        {"label": ">60–85㎡", "count": 20, "share_percent": "20.00"},
+    ]
+    assert payload["complex_profile"]["households"]["count"] == 100
+    assert payload["complex_profile"]["households"]["fetched_at"]
+    assert analyzed.text.index("complex-profile") < analyzed.text.index("핵심 분석 지표")
+    assert "단지 기본 정보" in analyzed.text
+    assert "Alpha road" in analyzed.text
+    assert "거래 관측 면적" in analyzed.text
+    assert payload["complex_profile"]["observed_area_groups"] == [
+        {"key": "floor-84", "label": "84㎡", "eligible_transaction_count": 36}
+    ]
+    assert "84㎡" in analyzed.text
+    assert "세대수 근거: K-APT apartment basic information" in analyzed.text
+    assert "K-APT 공식 면적대별 세대 재고" in analyzed.text
+    assert "세대 재고나 단지 전체 구성의 증거가 아닙니다." in analyzed.text
     assert payload["turnover"]["value"] == "0.24"
     assert payload["retention"]["value"] == "2"
     assert payload["mdd"]["value"] == "-0.5"
@@ -228,6 +324,47 @@ def test_selected_kapt_households_are_persisted_and_used_offline_for_percent_met
         "retention": {"unit": "%", "meaning": "비교 기간 거래량 ÷ 기준 기간 거래량"},
         "mdd": {"unit": "%", "meaning": "가격 시계열 최대낙폭"},
     }
+
+
+def test_profile_age_is_exported_and_rendered_as_of_analysis_date(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    service = HouseholdSearch(household_count=100)
+    _save_two_year_metric_evidence(store, Apartment("a", "Alpha"))
+    client = TestClient(
+        create_app(
+            search_service=service,
+            store=store,
+            analysis_today=lambda: date(2026, 9, 8),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post(
+        "/analysis",
+        data={"start": "2023-01-01", "end": "2024-12-31", "transaction_types": ["brokered"]},
+    )
+    payload = client.get("/export?kind=analysis").json()
+    assert response.status_code == 200
+    assert payload["complex_profile"]["profile"]["age"] == {
+        "elapsed_years": 27,
+        "elapsed_months": 4,
+        "as_of": "2026-09-08",
+    }
+    assert "연식 27년 4개월 · 2026-09-08 기준" in response.text
+
+
+@pytest.mark.parametrize(
+    ("as_of", "expected"),
+    [
+        (date(2026, 5, 2), {"elapsed_years": 26, "elapsed_months": 11, "as_of": "2026-05-02"}),
+        (date(2026, 5, 3), {"elapsed_years": 27, "elapsed_months": 0, "as_of": "2026-05-03"}),
+        (date(1999, 5, 2), None),
+        (date(1999, 5, 4), {"elapsed_years": 0, "elapsed_months": 0, "as_of": "1999-05-04"}),
+    ],
+)
+def test_profile_age_uses_completed_calendar_months(as_of, expected) -> None:
+    assert _profile_age(date(1999, 5, 3), as_of) == expected
+    assert _profile_age(date(2027, 1, 1), as_of) is None
 
 
 def test_analysis_preview_uses_offline_context_without_mutating_official_result(
@@ -534,19 +671,33 @@ def test_explicit_household_refresh_preserves_last_good_evidence_on_failure(tmp_
     client = TestClient(create_app(search_service=service, store=store))
     client.post("/search", data={"name": "Alpha", "sido_code": "11"})
     client.post("/select", data={"source_id": "a"})
+    initial_profile = store.load_profile("a")
+    initial_household = store.load_household_evidence("a")
+    assert initial_profile is not None and initial_profile.profile.buildings == 3
+    assert initial_household is not None and initial_household.count == 100
     service.household_count = 120
+    service.profile_buildings = 4
+    service.profile_highest_floor = 24
 
     refreshed = client.post("/household/refresh")
 
     assert refreshed.status_code == 200
     evidence = store.load_household_evidence("a")
     assert evidence is not None and evidence.count == 120
+    profile = store.load_profile("a")
+    assert profile is not None
+    assert profile.profile.buildings == 4
+    assert profile.profile.highest_floor == 24
     service.fail = True
     failed = client.post("/household/refresh")
     preserved = store.load_household_evidence("a")
+    preserved_profile = store.load_profile("a")
     assert failed.status_code == 200
     assert "fixture K-APT failure" in failed.text
     assert preserved is not None and preserved.count == 120
+    assert preserved_profile is not None
+    assert preserved_profile.profile.buildings == 4
+    assert preserved_profile.profile.highest_floor == 24
 
 
 def test_persisted_complex_households_do_not_leak_into_area_group_turnover(tmp_path) -> None:
@@ -620,7 +771,11 @@ def test_missing_complex_household_shows_refresh_guidance_and_machine_reason(tmp
     assert response.status_code == 200
     assert "계산 불가: 세대수 분모가 없거나 올바르지 않습니다" in response.text
     assert "분석 전 K-APT 세대수 근거를 갱신해 주세요." in response.text
+    assert "단지 기본 정보" in response.text
+    assert "K-APT 단지 기본정보가 확인되지 않았습니다." in response.text
     assert payload["turnover"]["value"] is None
+    assert payload["complex_profile"]["profile"] is None
+    assert payload["complex_profile"]["apartment"]["road_address"] == "Alpha road"
     assert payload["turnover"]["unavailable"]["reason"] == (
         "household denominator is missing or invalid"
     )

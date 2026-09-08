@@ -13,7 +13,13 @@ import pytest
 from playwright.sync_api import Page, expect, sync_playwright
 from uvicorn import Config, Server
 
-from apt_analyzer.apartment_data import ApartmentCandidate, IdentityResolution, ResolutionStatus
+from apt_analyzer.apartment_data import (
+    ApartmentCandidate,
+    ApartmentProfile,
+    AreaHouseholdBand,
+    IdentityResolution,
+    ResolutionStatus,
+)
 from apt_analyzer.domain import Apartment, NormalizedTransaction, TransactionType
 from apt_analyzer.persistence import SQLiteStore
 from apt_analyzer.web import create_app
@@ -33,7 +39,28 @@ class BrowserFixtureService:
         self, selected: ApartmentCandidate
     ) -> tuple[ApartmentCandidate, IdentityResolution]:
         apartment = Apartment(selected.source_id, selected.name)
-        return selected, IdentityResolution(ResolutionStatus.RESOLVED, (selected,), apartment)
+        enriched = ApartmentCandidate(
+            selected.source_id,
+            selected.name,
+            selected.legal_dong_code,
+            selected.lot_address,
+            selected.road_address,
+            100,
+            "K-APT apartment basic information",
+            ApartmentProfile(
+                buildings=3,
+                approval_date=date(1999, 5, 3),
+                highest_floor=20,
+                heating="지역난방",
+                hall_type="혼합식",
+                builder="한신공영",
+                developer="한국토지주택공사 LH",
+                management="위탁관리",
+                sale_type="분양",
+                area_bands=(AreaHouseholdBand("≤60㎡", 100),),
+            ),
+        )
+        return enriched, IdentityResolution(ResolutionStatus.RESOLVED, (enriched,), apartment)
 
     def retrieve(
         self, _candidate: ApartmentCandidate, apartment: Apartment, period: object
@@ -108,6 +135,11 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             expect(page.get_by_role("button", name="기간 선택 시작")).to_have_count(0)
             expect(page.get_by_role("button", name="적용")).to_have_count(0)
             expect(page.get_by_role("table", name="핵심 분석 지표")).to_be_visible()
+            profile = page.locator(".complex-profile")
+            expect(profile).to_be_visible()
+            expect(profile).to_contain_text("단지 기본 정보")
+            expect(profile).to_contain_text("K-APT 공식 면적대별 세대 재고")
+            expect(profile.get_by_role("table")).to_be_visible()
             context_details = page.locator("details.context-details")
             expect(context_details).not_to_have_attribute("open", "")
             context_details.locator("summary").click()
@@ -120,6 +152,10 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             )
             assert metric_box is not None
             assert metric_box["x"] >= 0 and metric_box["x"] + metric_box["width"] <= 391
+            profile_box = profile.bounding_box()
+            assert profile_box is not None
+            assert profile.evaluate("node => node.scrollWidth <= node.clientWidth")
+            assert profile_box["x"] >= 0 and profile_box["x"] + profile_box["width"] <= 391
             page.set_viewport_size({"width": 1280, "height": 900})
             assert page.locator("#price-chart").evaluate("(canvas) => canvas.width") > 0
             assert page.locator("#volume-chart").evaluate("(canvas) => canvas.width") > 0

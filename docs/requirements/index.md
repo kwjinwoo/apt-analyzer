@@ -44,6 +44,7 @@ Use [TEMPLATE.md](TEMPLATE.md) when adding a requirement.
 | [R-026](R-026-chart-preview.md) | Non-mutating chart period preview | superseded | P1 | Superseded by R-027 duration-aware preview turnover |
 | [R-027](R-027-chart-preview-turnover.md) | Duration-aware chart preview turnover | superseded | P1 | Superseded by R-028 retention split |
 | [R-028](R-028-chart-preview-retention-split.md) | Duration-aware chart preview retention split | accepted | P1 | User-approved 24-month preview retention interpretation |
+| [R-029](R-029-apartment-profile.md) | Persisted apartment-complex profile | accepted | P1 | User-approved result-profile direction |
 
 ## Change policy
 

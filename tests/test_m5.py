@@ -214,7 +214,7 @@ def test_v2_migration_preserves_coverage_and_adds_period_index(tmp_path) -> None
 
     store = SQLiteStore(path)
 
-    assert store.schema_version == 6
+    assert store.schema_version == 7
     assert store.coverage_states("apt-1", "fixture") == {"202401": "valid_empty"}
     assert "ix_transactions_apartment_contract" in store.transaction_query_plan(
         "apt-1", AnalysisPeriod(date(2024, 1, 1), date(2024, 1, 31))

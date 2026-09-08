@@ -4,12 +4,12 @@ title: Visible analysis context
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-09-03
+updated: 2026-09-08
 origin: "Initial requirements R17"
 supersedes: []
 superseded_by: null
-related_requirements: [R-003, R-006, R-008, R-010, R-011, R-016, R-017, R-024, R-026]
-related_decisions: [ADR-0010, ADR-0012]
+related_requirements: [R-003, R-006, R-008, R-010, R-011, R-016, R-017, R-024, R-026, R-029]
+related_decisions: [ADR-0010, ADR-0012, ADR-0015]
 ---
 
 # R-019: Visible analysis context

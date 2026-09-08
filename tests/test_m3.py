@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from apt_analyzer.analytics import HouseholdEvidence
-from apt_analyzer.apartment_data import ApartmentCandidate
+from apt_analyzer.apartment_data import ApartmentCandidate, ApartmentProfile, AreaHouseholdBand
 from apt_analyzer.comparison import CommonAnalysisConfig, compare
 from apt_analyzer.domain import (
     AnalysisPeriod,
@@ -31,14 +31,14 @@ def test_saved_interest_round_trip_is_idempotent_and_migrates_v4(tmp_path):
 
     store.save_interest(candidate, apartment, region_code="11")
     store.save_interest(candidate, apartment, region_code="11")
-    assert store.schema_version == 6
+    assert store.schema_version == 7
     assert [(item.candidate, item.apartment) for item in store.list_interests()] == [
         (candidate, apartment)
     ]
     store.close()
 
     reopened = SQLiteStore(path)
-    assert reopened.schema_version == 6
+    assert reopened.schema_version == 7
     assert [(item.candidate, item.apartment) for item in reopened.list_interests()] == [
         (candidate, apartment)
     ]
@@ -49,7 +49,7 @@ def test_saved_interest_round_trip_is_idempotent_and_migrates_v4(tmp_path):
 
 def test_household_evidence_round_trips_across_schema_v6(tmp_path):
     store = SQLiteStore(tmp_path / "households.db")
-    assert store.schema_version == 6
+    assert store.schema_version == 7
     store.save_household_evidence(
         "apt-1", 1842, scope="complex", source="K-APT apartment basic information"
     )
@@ -64,6 +64,53 @@ def test_household_evidence_round_trips_across_schema_v6(tmp_path):
     )
 
 
+def test_profile_round_trips_replaces_atomically_after_v6_migration(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "profiles.db"
+    store = SQLiteStore(path)
+    store.save_household_evidence("apt-1", 100, scope="complex", source="fixture")
+    store.save_interest(
+        ApartmentCandidate("k1", "Example", "1234567890", "lot", "road"),
+        Apartment("apt-1", "Example"),
+        region_code="11",
+    )
+    store.close()
+    with sqlite3.connect(path) as connection:
+        connection.execute("UPDATE schema_version SET version=6")
+        connection.execute("DROP TABLE apartment_profiles")
+    migrated = SQLiteStore(path)
+    assert migrated.load_profile("apt-1") is None
+    first = ApartmentProfile(
+        buildings=2, highest_floor=10, area_bands=(AreaHouseholdBand("≤60㎡", 80),)
+    )
+    migrated.save_profile("apt-1", first, source="K-APT fixture")
+    loaded = migrated.load_profile("apt-1")
+    assert loaded is not None and loaded.profile == first and loaded.source == "K-APT fixture"
+    second = ApartmentProfile(buildings=3, highest_floor=12)
+    migrated.save_profile("apt-1", second, source="K-APT refreshed")
+    replaced = migrated.load_profile("apt-1")
+    assert (
+        replaced is not None and replaced.profile == second and replaced.source == "K-APT refreshed"
+    )
+    assert migrated.load_household_evidence("apt-1") is not None
+    assert len(migrated.list_interests()) == 1
+
+
+def test_corrupt_persisted_profile_is_rejected(tmp_path):
+    import pytest
+
+    store = SQLiteStore(tmp_path / "corrupt-profile.db")
+    store.save_profile("apt-1", ApartmentProfile(buildings=2), source="fixture")
+    store._connection.execute(
+        "UPDATE apartment_profiles SET profile_json=? WHERE apartment_id=?",
+        ("[]", "apt-1"),
+    )
+    store._connection.commit()
+    with pytest.raises(ValueError, match="invalid persisted apartment profile"):
+        store.load_profile("apt-1")
+
+
 def test_schema_v5_migrates_without_a_manual_reset(tmp_path):
     import sqlite3
 
@@ -76,7 +123,7 @@ def test_schema_v5_migrates_without_a_manual_reset(tmp_path):
 
     migrated = SQLiteStore(path)
 
-    assert migrated.schema_version == 6
+    assert migrated.schema_version == 7
     assert migrated.load_household_evidence("apt-1") is None
     migrated.save_household_evidence("apt-1", 1842, scope="complex", source="fixture")
     assert migrated.load_household_evidence("apt-1") is not None
@@ -102,7 +149,7 @@ def test_legacy_v1_database_migrates_and_preserves_transaction(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 6
+    assert store.schema_version == 7
     assert store.load_transactions("apt-1") == (
         NormalizedTransaction(
             "apt-1",
@@ -177,7 +224,7 @@ def test_legacy_exact_duplicates_collapse_during_atomic_migration(tmp_path):
             """
         )
     store = SQLiteStore(path)
-    assert store.schema_version == 6
+    assert store.schema_version == 7
     assert len(store.load_transactions("apt-1")) == 1
 
 
@@ -187,7 +234,7 @@ def test_invalid_schema_version_and_mismatched_month_are_failures(tmp_path):
     path = tmp_path / "future.db"
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
-        connection.execute("INSERT INTO schema_version VALUES (7)")
+        connection.execute("INSERT INTO schema_version VALUES (8)")
     import pytest
 
     with pytest.raises(ValueError, match="unsupported schema version"):
@@ -248,7 +295,7 @@ def test_schema_v3_database_migrates_to_v4_and_preserves_evidence(tmp_path):
 
     store = SQLiteStore(path)
 
-    assert store.schema_version == 6
+    assert store.schema_version == 7
     assert len(store.load_transactions("apt-1")) == 1
     assert store.api_usage_snapshot("2026-08-28", ("list", "detail", "trade")) == {
         "list": 0,

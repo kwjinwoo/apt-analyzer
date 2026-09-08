@@ -24,6 +24,30 @@ def normalize_name(value: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class AreaHouseholdBand:
+    """Validated K-APT household count for one official area band."""
+
+    label: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ApartmentProfile:
+    """Optional, source-labelled K-APT complex profile facts."""
+
+    buildings: int | None = None
+    approval_date: date | None = None
+    highest_floor: int | None = None
+    heating: str | None = None
+    hall_type: str | None = None
+    builder: str | None = None
+    developer: str | None = None
+    management: str | None = None
+    sale_type: str | None = None
+    area_bands: tuple[AreaHouseholdBand, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ApartmentCandidate:
     """Expose source identity and address evidence before project resolution."""
 
@@ -34,6 +58,7 @@ class ApartmentCandidate:
     road_address: str
     household_count: int | None = None
     household_source: str | None = None
+    profile: ApartmentProfile | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +242,7 @@ class ApartmentDataService:
         ):
             return selected, IdentityResolution(ResolutionStatus.NOT_FOUND, (selected,))
         household_count = _household_count(row)
+        profile = _parse_profile(row)
         enriched = ApartmentCandidate(
             source_id=detail_id,
             name=detail_name,
@@ -227,6 +253,7 @@ class ApartmentDataService:
             household_source=(
                 "K-APT apartment basic information" if household_count is not None else None
             ),
+            profile=profile,
         )
         return enriched, resolve_candidate((enriched,))
 
@@ -334,6 +361,69 @@ def _household_count(row: Mapping[str, str]) -> int | None:
         if value > 0 and value == value.to_integral_value():
             return int(value)
     return None
+
+
+def _optional_nonnegative_int(value: str) -> int | None:
+    try:
+        parsed = Decimal(value.replace(",", ""))
+    except InvalidOperation:
+        return None
+    return int(parsed) if parsed >= 0 and parsed == parsed.to_integral_value() else None
+
+
+def _parse_profile(row: Mapping[str, str]) -> ApartmentProfile | None:
+    bands = tuple(
+        AreaHouseholdBand(label, count)
+        for label, key in (
+            ("≤60㎡", "kaptMparea60"),
+            (">60–85㎡", "kaptMparea85"),
+            (">85–135㎡", "kaptMparea135"),
+            (">135㎡", "kaptMparea136"),
+        )
+        if (count := _optional_nonnegative_int(_pick(row, key))) is not None
+    )
+    approval = _pick(row, "kaptUsedate")
+    approval_date = None
+    if len(approval) == 8 and approval.isdigit():
+        try:
+            approval_date = date(int(approval[:4]), int(approval[4:6]), int(approval[6:]))
+        except ValueError:
+            pass
+    profile = ApartmentProfile(
+        buildings=_positive_int(_pick(row, "kaptDongCnt")),
+        approval_date=approval_date,
+        highest_floor=_positive_int(_pick(row, "kaptTopFloor")),
+        heating=_pick(row, "codeHeatNm") or None,
+        hall_type=_pick(row, "codeHallNm") or None,
+        builder=_pick(row, "kaptBcompany") or None,
+        developer=_pick(row, "kaptAcompany") or None,
+        management=_pick(row, "codeMgrNm") or None,
+        sale_type=_pick(row, "codeSaleNm") or None,
+        area_bands=bands,
+    )
+    return (
+        profile
+        if any(
+            (
+                profile.buildings,
+                profile.approval_date,
+                profile.highest_floor,
+                profile.heating,
+                profile.hall_type,
+                profile.builder,
+                profile.developer,
+                profile.management,
+                profile.sale_type,
+                profile.area_bands,
+            )
+        )
+        else None
+    )
+
+
+def _positive_int(value: str) -> int | None:
+    parsed = _optional_nonnegative_int(value)
+    return parsed if parsed and parsed > 0 else None
 
 
 def _matches_lot_address(row: Mapping[str, str], lot_address: str) -> bool:

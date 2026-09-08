@@ -3,7 +3,7 @@ title: Requirement Map
 type: project
 role: topic
 status: active
-updated: 2026-09-03
+updated: 2026-09-08
 aliases:
   - Requirement knowledge graph
 tags:
@@ -15,7 +15,7 @@ tags:
 
 ## Scope
 
-This hub groups the twenty-seven catalogued requirements by knowledge dependency
+This hub groups the twenty-nine catalogued requirements by knowledge dependency
 instead of repeating their normative text.
 
 ## Knowledge
@@ -53,6 +53,7 @@ Period-driven analysis
   R-026 (superseded by R-027) → R-008/R-010/R-011/R-019/R-024
   R-027 (superseded by R-028) → R-008/R-026
   R-028 → R-010/R-027
+  R-029 → R-001/R-019/R-020/R-023
 
 Multi-complex use
   R-016 → R-015 → R-021
@@ -77,6 +78,10 @@ The arrows express knowledge dependency, not implementation order or control flo
   retention preview behavior are governed by [R-028](../../docs/requirements/R-028-chart-preview-retention-split.md)
   and [ADR-0014](../../docs/decisions/ADR-0014-chart-preview-retention-split.md).
   R-026/R-027 and ADR-0012/ADR-0013 remain historical superseded decisions.
+- Persisted complex profile facts and distinct transaction observations are
+  governed by [R-029](../../docs/requirements/R-029-apartment-profile.md) and
+  [ADR-0015](../../docs/decisions/ADR-0015-source-labeled-apartment-profile.md),
+  with navigation in [Apartment profile](../domain/apartment-profile.md).
 - Regional descriptive interpretation extends through [Regional relative analysis](regional-relative-analysis.md).
 
 ## Requirements
@@ -113,3 +118,4 @@ R-021 has independent profile and live multi-region evidence linked from its Req
 - [Transaction population](../data/transaction-population.md)
 - [Saved apartment interests](saved-apartment-interests.md)
 - [Period-driven analysis](period-driven-analysis.md)
+- [Apartment profile](../domain/apartment-profile.md)

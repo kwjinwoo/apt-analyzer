@@ -7,6 +7,7 @@ from apt_analyzer.acquisition import DataGoKrClient
 from apt_analyzer.apartment_data import (
     ApartmentCandidate,
     ApartmentDataService,
+    AreaHouseholdBand,
     IdentityMismatchError,
     ResolutionStatus,
     months,
@@ -40,6 +41,27 @@ def test_selected_candidate_is_enriched_from_kapt_detail_before_resolution() -> 
     assert resolution.status is ResolutionStatus.RESOLVED
     assert resolution.apartment is not None
     assert resolution.apartment.internal_id.startswith("apt-")
+
+
+def test_kapt_detail_enriches_typed_profile_and_validates_area_bands() -> None:
+    fields = """<kaptDongCnt>14</kaptDongCnt><kaptUsedate>19990503</kaptUsedate><kaptTopFloor>20</kaptTopFloor><codeHeatNm>지역난방</codeHeatNm><codeHallNm>혼합식</codeHallNm><kaptBcompany>한신공영</kaptBcompany><kaptAcompany>LH</kaptAcompany><codeMgrNm>위탁관리</codeMgrNm><codeSaleNm>분양</codeSaleNm><kaptMparea60>1190.0</kaptMparea60><kaptMparea85>0.0</kaptMparea85><kaptMparea135>bad</kaptMparea135><kaptMparea136>-1</kaptMparea136>"""
+    detail = (
+        "<response><header><resultCode>00</resultCode><resultMsg>OK</resultMsg></header><body><item><kaptCode>A1</kaptCode><kaptName>Example</kaptName><bjdCode>1234567890</bjdCode><kaptAddr>Example lot</kaptAddr><doroJuso>Example road</doroJuso><hoCnt>1190</hoCnt>"
+        + fields
+        + "</item></body></response>"
+    ).encode()
+    service = ApartmentDataService(
+        DataGoKrClient("encoded", transport=lambda _url, _timeout: detail)
+    )
+    enriched, resolution = service.resolve(ApartmentCandidate("A1", "Example", "", "lot", "road"))
+    assert resolution.status is ResolutionStatus.RESOLVED
+    assert enriched.profile is not None
+    assert enriched.profile.buildings == 14
+    assert enriched.profile.approval_date == date(1999, 5, 3)
+    assert enriched.profile.area_bands == (
+        AreaHouseholdBand("≤60㎡", 1190),
+        AreaHouseholdBand(">60–85㎡", 0),
+    )
 
 
 @pytest.mark.parametrize(

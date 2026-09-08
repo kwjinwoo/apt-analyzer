@@ -6,17 +6,28 @@ import hashlib
 import json
 import sqlite3
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 from zoneinfo import ZoneInfo
 
-from apt_analyzer.apartment_data import ApartmentCandidate, months
+from apt_analyzer.apartment_data import (
+    ApartmentCandidate,
+    ApartmentProfile,
+    AreaHouseholdBand,
+    months,
+)
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 SEOUL = ZoneInfo("Asia/Seoul")
+
+
+def _as_object(value: object) -> object:
+    """Stop untyped JSON values at the persistence boundary."""
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +70,15 @@ class HouseholdEvidenceRecord:
 
     count: int
     scope: str
+    source: str
+    fetched_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class ApartmentProfileRecord:
+    """Persisted K-APT profile with provenance."""
+
+    profile: ApartmentProfile
     source: str
     fetched_at: str
 
@@ -138,6 +158,117 @@ class SQLiteStore:
             ),
         )
         self._connection.commit()
+
+    def save_profile(self, apartment_id: str, profile: ApartmentProfile, *, source: str) -> None:
+        """Atomically replace persisted profile evidence."""
+        if not source.strip():
+            raise ValueError("profile source must not be empty")
+        self._connection.execute(
+            "INSERT INTO apartment_profiles(apartment_id, profile_json, source, fetched_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(apartment_id) DO UPDATE SET profile_json=excluded.profile_json, source=excluded.source, fetched_at=excluded.fetched_at",
+            (
+                apartment_id,
+                json.dumps(asdict(profile), ensure_ascii=False, default=str),
+                source,
+                datetime.now(UTC).replace(microsecond=0).isoformat(),
+            ),
+        )
+        self._connection.commit()
+
+    def save_profile_and_household(
+        self,
+        apartment_id: str,
+        profile: ApartmentProfile | None,
+        household_count: int | None,
+        *,
+        household_source: str | None,
+        profile_source: str,
+    ) -> None:
+        """Atomically replace the explicit profile and its matching household evidence."""
+        if household_count is not None:
+            if household_count <= 0:
+                raise ValueError("household count must be positive")
+            if household_source is None or not household_source.strip():
+                raise ValueError("household source must not be empty")
+        if profile is not None and not profile_source.strip():
+            raise ValueError("profile source must not be empty")
+        with self._connection:
+            if household_count is not None and household_source:
+                self._connection.execute(
+                    "INSERT INTO household_evidence(apartment_id, household_count, scope, source, fetched_at) VALUES (?, ?, 'complex', ?, ?) ON CONFLICT(apartment_id) DO UPDATE SET household_count=excluded.household_count, source=excluded.source, fetched_at=excluded.fetched_at",
+                    (
+                        apartment_id,
+                        household_count,
+                        household_source,
+                        datetime.now(UTC).replace(microsecond=0).isoformat(),
+                    ),
+                )
+            if profile is not None:
+                self._connection.execute(
+                    "INSERT INTO apartment_profiles(apartment_id, profile_json, source, fetched_at) VALUES (?, ?, ?, ?) ON CONFLICT(apartment_id) DO UPDATE SET profile_json=excluded.profile_json, source=excluded.source, fetched_at=excluded.fetched_at",
+                    (
+                        apartment_id,
+                        json.dumps(asdict(profile), ensure_ascii=False, default=str),
+                        profile_source,
+                        datetime.now(UTC).replace(microsecond=0).isoformat(),
+                    ),
+                )
+
+    def load_profile(self, apartment_id: str) -> ApartmentProfileRecord | None:
+        """Load profile evidence without external access."""
+        row = self._connection.execute(
+            "SELECT profile_json, source, fetched_at FROM apartment_profiles WHERE apartment_id=?",
+            (apartment_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        raw_value: object = json.loads(str(row["profile_json"]))
+        raw = raw_value
+        if not isinstance(raw, dict):
+            raise ValueError("invalid persisted apartment profile")
+        typed_raw: dict[str, object] = cast(dict[str, object], raw)
+        approval_raw = _as_object(typed_raw.get("approval_date"))
+        approval = (
+            date.fromisoformat(approval_raw)
+            if isinstance(approval_raw, str) and approval_raw
+            else None
+        )
+        bands_raw = _as_object(typed_raw.get("area_bands", []))
+        if not isinstance(bands_raw, list):
+            raise ValueError("invalid persisted apartment profile")
+        typed_bands: list[object] = cast(list[object], bands_raw)
+        bands: list[AreaHouseholdBand] = []
+        for item in typed_bands:
+            band = _as_object(item)
+            if not isinstance(band, dict):
+                raise ValueError("invalid persisted apartment profile")
+            label = _as_object(cast(dict[str, object], band).get("label"))
+            count = _as_object(cast(dict[str, object], band).get("count"))
+            if not isinstance(label, str) or not isinstance(count, int) or isinstance(count, bool):
+                raise ValueError("invalid persisted apartment profile")
+            bands.append(AreaHouseholdBand(label, count))
+
+        def optional_int(name: str) -> int | None:
+            result = _as_object(typed_raw.get(name))
+            return result if isinstance(result, int) else None
+
+        def optional_text(name: str) -> str | None:
+            result = _as_object(typed_raw.get(name))
+            return result if isinstance(result, str) else None
+
+        profile = ApartmentProfile(
+            buildings=optional_int("buildings"),
+            approval_date=approval,
+            highest_floor=optional_int("highest_floor"),
+            heating=optional_text("heating"),
+            hall_type=optional_text("hall_type"),
+            builder=optional_text("builder"),
+            developer=optional_text("developer"),
+            management=optional_text("management"),
+            sale_type=optional_text("sale_type"),
+            area_bands=tuple(bands),
+        )
+        return ApartmentProfileRecord(profile, str(row["source"]), str(row["fetched_at"]))
 
     def load_household_evidence(self, apartment_id: str) -> HouseholdEvidenceRecord | None:
         """Load persisted household evidence without contacting an external source."""
@@ -606,10 +737,11 @@ class SQLiteStore:
             self._migrate_v4()
             self._migrate_v5()
             self._migrate_v6()
+            self._migrate_v7()
             self._connection.commit()
             return
         version = int(row[0])
-        if version not in (1, 2, 3, 4, 5, CURRENT_SCHEMA_VERSION):
+        if version not in (1, 2, 3, 4, 5, 6, CURRENT_SCHEMA_VERSION):
             raise ValueError(f"unsupported schema version: {version}")
         if version == 1:
             self._migrate_v1()
@@ -623,6 +755,7 @@ class SQLiteStore:
         )
         self._migrate_v5()
         self._migrate_v6()
+        self._migrate_v7()
         self._connection.commit()
 
     def _migrate_v3(self) -> None:
@@ -703,6 +836,15 @@ class SQLiteStore:
             );
             UPDATE schema_version SET version=6;
             """
+        )
+
+    def _migrate_v7(self) -> None:
+        """Add persisted optional K-APT profile evidence."""
+        self._connection.executescript(
+            """CREATE TABLE IF NOT EXISTS apartment_profiles (
+                apartment_id TEXT PRIMARY KEY, profile_json TEXT NOT NULL,
+                source TEXT NOT NULL, fetched_at TEXT NOT NULL
+            ); UPDATE schema_version SET version=7;"""
         )
 
     def _migrate_v1(self) -> None:

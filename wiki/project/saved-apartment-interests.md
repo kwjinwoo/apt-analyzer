@@ -34,6 +34,9 @@ membership.
 
 Identity evidence remains governed by [Apartment identity](../domain/apartment-identity.md)
 and the normative requirement [R-023](../../docs/requirements/R-023-saved-apartment-interests.md).
+When profile evidence exists, the result uses the source-labelled records
+described by [Apartment profile](../domain/apartment-profile.md); saved-interest
+selection itself remains offline.
 
 ## Graph connections
 
@@ -45,6 +48,7 @@ and the normative requirement [R-023](../../docs/requirements/R-023-saved-apartm
 ## Requirements
 
 - [R-023: Saved apartment interests](../../docs/requirements/R-023-saved-apartment-interests.md) — accepted and verified by deterministic persistence and web contracts.
+- [R-029: Persisted apartment-complex profile](../../docs/requirements/R-029-apartment-profile.md) — separates persisted K-APT facts from transaction observations.
 
 ## Decisions and open questions
 
@@ -71,3 +75,4 @@ provide the local UI boundary. Representative contracts are covered by
 - [Apartment identity](../domain/apartment-identity.md)
 - [Requirement map](requirement-map.md)
 - [MVP knowledge map](mvp-knowledge-map.md)
+- [Apartment profile](../domain/apartment-profile.md)

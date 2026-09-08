@@ -3,7 +3,7 @@ title: Apartment Identity
 type: domain
 role: topic
 status: active
-updated: 2026-08-22
+updated: 2026-09-08
 aliases:
   - Complex identity
   - Internal apartment ID
@@ -26,6 +26,9 @@ A display name cannot establish identity because names can be duplicated, normal
 
 An identity error has a larger blast radius than an ordinary parsing error: it can merge transactions from different complexes, fragment one complex, attach the wrong household denominator, and invalidate comparisons while still producing plausible metrics.
 
+Optional K-APT profile facts are persisted only after explicit identity-resolved
+selection or refresh and remain source-labelled; see [Apartment profile](apartment-profile.md).
+
 ## Graph connections
 
 - Defines the apartment boundary used by [Transaction population](../data/transaction-population.md).
@@ -39,6 +42,7 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 - [R-002: Sale transaction retrieval](../../docs/requirements/R-002-transaction-retrieval.md)
 - [R-016: Apartment comparison](../../docs/requirements/R-016-apartment-comparison.md)
 - [R-023: Saved apartment interests](../../docs/requirements/R-023-saved-apartment-interests.md)
+- [R-029: Persisted apartment-complex profile](../../docs/requirements/R-029-apartment-profile.md)
 
 ## Decisions and open questions
 

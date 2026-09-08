@@ -3,7 +3,7 @@ title: Analysis Context
 type: domain
 role: topic
 status: active
-updated: 2026-09-03
+updated: 2026-09-08
 aliases:
   - Metric context
   - Analysis configuration
@@ -35,6 +35,10 @@ selection context nested inside the current official context. It reuses the
 official apartment, area, inclusion, household, coverage, and overall-period
 evidence, but its values do not replace the official result or export.
 
+[R-029](../../docs/requirements/R-029-apartment-profile.md) adds source-labelled
+complex profile and official area-band evidence to single-apartment results,
+while keeping transaction-observed areas explicitly separate.
+
 ## Graph connections
 
 - Identifies the subject through [Apartment identity](apartment-identity.md).
@@ -52,6 +56,7 @@ evidence, but its values do not replace the official result or export.
 - [R-019: Visible analysis context](../../docs/requirements/R-019-analysis-context.md)
 - [R-024: Period-driven analysis and completed-month rolling metrics](../../docs/requirements/R-024-period-driven-analysis.md)
 - [R-026: Non-mutating chart period preview](../../docs/requirements/R-026-chart-preview.md)
+- [R-029: Persisted apartment-complex profile](../../docs/requirements/R-029-apartment-profile.md)
 
 ## Decisions and open questions
 
@@ -76,3 +81,4 @@ evidence, but its values do not replace the official result or export.
 - [Requirement map](../project/requirement-map.md)
 - [Transaction quality](../data/transaction-quality.md)
 - [Price-series evidence](../data/price-series-evidence.md)
+- [Apartment profile](apartment-profile.md)

@@ -29,3 +29,4 @@ Once accepted, an ADR preserves the decision made at that time. Correcting wordi
 | [ADR-0012](ADR-0012-direct-chart-preview.md) | Direct non-mutating chart previews | superseded | 2026-09-03 |
 | [ADR-0013](ADR-0013-duration-aware-chart-preview-turnover.md) | Duration-aware chart preview turnover | superseded | 2026-09-03 |
 | [ADR-0014](ADR-0014-chart-preview-retention-split.md) | Chart preview 24-month retention split | accepted | 2026-09-07 |
+| [ADR-0015](ADR-0015-source-labeled-apartment-profile.md) | Source-labeled persisted apartment profile | accepted | 2026-09-08 |

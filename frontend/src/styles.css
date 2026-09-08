@@ -271,6 +271,74 @@ th {
   border-top: 1px solid #e5eaf0;
   padding: 0.7rem 0;
 }
+.complex-profile {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #d8e1ec;
+  border-radius: 0.65rem;
+  background: #fbfcfe;
+}
+.complex-profile-heading h3 {
+  margin: 0;
+}
+.complex-profile-heading p {
+  margin: 0.35rem 0 0;
+  color: #52667d;
+  overflow-wrap: anywhere;
+}
+.complex-profile-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.9rem 0;
+}
+.complex-profile-stats > div {
+  padding: 0.65rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 0.45rem;
+  background: #fff;
+}
+.complex-profile-stats dt,
+.complex-profile-stats dd {
+  margin: 0;
+}
+.complex-profile-stats dt {
+  color: #52667d;
+  font-size: 0.82rem;
+}
+.complex-profile-stats dd {
+  margin-top: 0.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.profile-age {
+  display: inline-block;
+  margin-top: 0.2rem;
+  color: #52667d;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.complex-profile table {
+  min-width: 0;
+  margin-top: 0.75rem;
+}
+.complex-profile-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  gap: 0.35rem 0.8rem;
+  margin: 0.8rem 0;
+}
+.complex-profile-facts dt {
+  color: #52667d;
+}
+.complex-profile-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.observed-area-details {
+  margin-top: 0.8rem;
+}
 .metric-summary {
   overflow-x: auto;
 }
@@ -434,6 +502,15 @@ pre {
   }
   .preview-metrics {
     grid-template-columns: 1fr;
+  }
+  .complex-profile-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .complex-profile-facts {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+  .complex-profile table {
+    width: 100%;
   }
   .metric-summary thead {
     display: none;

@@ -43,6 +43,7 @@ from apt_analyzer.apartment_data import (
     MOLIT_SALE_ENDPOINT,
     ApartmentCandidate,
     ApartmentDataService,
+    ApartmentProfile,
     IdentityResolution,
     months,
     normalize_name,
@@ -58,7 +59,7 @@ from apt_analyzer.domain import (
     TransactionInclusionPolicy,
     TransactionType,
 )
-from apt_analyzer.persistence import SQLiteStore
+from apt_analyzer.persistence import ApartmentProfileRecord, HouseholdEvidenceRecord, SQLiteStore
 from apt_analyzer.regional_screening import (
     SUPPORTED_METHODS,
     SUPPORTED_UNITS,
@@ -418,13 +419,13 @@ def create_app(
             )
             workspace.selected_sido_code = workspace.search_sido_code
             owned_store.save_apartment(resolution.apartment)
-            if enriched.household_count is not None and enriched.household_source is not None:
-                owned_store.save_household_evidence(
-                    resolution.apartment.internal_id,
-                    enriched.household_count,
-                    scope="complex",
-                    source=enriched.household_source,
-                )
+            owned_store.save_profile_and_household(
+                resolution.apartment.internal_id,
+                enriched.profile,
+                enriched.household_count,
+                household_source=enriched.household_source,
+                profile_source="K-APT apartment basic information",
+            )
             workspace.apartments[resolution.apartment.internal_id] = resolution.apartment
             _hydrate_area_groups(workspace, owned_store, resolution.apartment.internal_id)
         return _page(request, templates, workspace, (enriched,))
@@ -486,11 +487,12 @@ def create_app(
                 raise ValueError("단지 식별 근거가 변경되어 세대수를 저장하지 않았습니다.")
             if enriched.household_count is None or enriched.household_source is None:
                 raise ValueError("K-APT 세대수 근거가 없습니다.")
-            owned_store.save_household_evidence(
+            owned_store.save_profile_and_household(
                 workspace.apartment.internal_id,
+                enriched.profile,
                 enriched.household_count,
-                scope="complex",
-                source=enriched.household_source,
+                household_source=enriched.household_source,
+                profile_source="K-APT apartment basic information",
             )
             workspace.candidate = enriched
             workspace.status = "selected"
@@ -595,7 +597,8 @@ def create_app(
             workspace.status = "selection_required"
             return _page(request, templates, workspace, ())
         period = AnalysisPeriod(date.fromisoformat(start), date.fromisoformat(end))
-        rolling_periods = derive_completed_month_periods(period, today=today())
+        analysis_date = today()
+        rolling_periods = derive_completed_month_periods(period, today=analysis_date)
         transactions = owned_store.load_transactions(workspace.apartment.internal_id, period)
         persisted_coverage = owned_store.coverage_states(
             workspace.apartment.internal_id, "MOLIT apartment sale transactions"
@@ -621,7 +624,10 @@ def create_app(
         period_status = {month: "complete" for month in requested_months}
         for month in requested_months:
             year, month_number = int(month[:4]), int(month[4:])
-            if date(year, month_number, calendar.monthrange(year, month_number)[1]) >= today():
+            if (
+                date(year, month_number, calendar.monthrange(year, month_number)[1])
+                >= analysis_date
+            ):
                 period_status[month] = "incomplete"
         group = (
             next(
@@ -707,12 +713,23 @@ def create_app(
             data_status=DataCoverageStatus.COMPLETE
             if transactions
             else DataCoverageStatus.VALID_EMPTY,
-            rolling_today=today(),
+            rolling_today=analysis_date,
             monthly_coverage=availability,
             rolling_defaults=True,
         )
         workspace.status = "unavailable" if not complete_coverage else "analyzed"
         app.state.last_result = result_to_dict(result)
+        app.state.last_result["complex_profile"] = _complex_profile_dict(
+            workspace.candidate,
+            workspace.apartment,
+            owned_store.load_profile(workspace.apartment.internal_id),
+            effective_household_count,
+            effective_household_scope,
+            effective_household_source,
+            persisted_household,
+            result.population.eligible,
+            analysis_date,
+        )
         app.state.last_result["data_status"] = (
             "coverage-limited"
             if not complete_coverage
@@ -755,7 +772,7 @@ def create_app(
                 "period_status": item.status.split(":", 1)[-1],
             }
             for item in monthly_transaction_trend(
-                result.population, period, availability, today=today()
+                result.population, period, availability, today=analysis_date
             )
         ]
         eligible_by_month = {
@@ -1533,6 +1550,107 @@ def _monthly_series(
             }
         )
     return values
+
+
+def _complex_profile_dict(
+    candidate: ApartmentCandidate | None,
+    apartment: Apartment,
+    profile_record: ApartmentProfileRecord | None,
+    household_count: int | None,
+    household_scope: str,
+    household_source: str | None,
+    persisted_household: HouseholdEvidenceRecord | None,
+    eligible: tuple[NormalizedTransaction, ...],
+    as_of: date,
+) -> dict[str, object]:
+    """Serialize persisted complex facts and current transaction-area observations."""
+    profile: ApartmentProfile | None = None if profile_record is None else profile_record.profile
+    total = household_count if household_count and household_count > 0 else None
+    household_fetched_at = None
+    if (
+        persisted_household is not None
+        and persisted_household.count == household_count
+        and persisted_household.scope == household_scope
+        and persisted_household.source == household_source
+    ):
+        household_fetched_at = persisted_household.fetched_at
+    bands: list[dict[str, object]] = []
+    if profile is not None:
+        for band in profile.area_bands:
+            if band.count == 0:
+                continue
+            bands.append(
+                {
+                    "label": band.label,
+                    "count": band.count,
+                    "share_percent": None
+                    if total is None
+                    else f"{Decimal(band.count * 100) / Decimal(total):.2f}",
+                }
+            )
+    age = None if profile is None else _profile_age(profile.approval_date, as_of)
+    observed = [
+        {
+            "key": group.key,
+            "label": group.label,
+            "eligible_transaction_count": sum(
+                1
+                for transaction in eligible
+                if transaction.exclusive_area_sqm in group.raw_areas_sqm
+            ),
+        }
+        for group in discover_area_groups(eligible)
+    ]
+    return {
+        "apartment": {
+            "id": apartment.internal_id,
+            "name": apartment.display_name,
+            "source_id": None if candidate is None else candidate.source_id,
+            "road_address": None if candidate is None else candidate.road_address,
+            "lot_address": None if candidate is None else candidate.lot_address,
+        },
+        "households": {
+            "count": total,
+            "scope": household_scope,
+            "source": household_source,
+            "fetched_at": household_fetched_at,
+        },
+        "profile": None
+        if profile is None
+        else {
+            "buildings": profile.buildings,
+            "approval_date": None
+            if profile.approval_date is None
+            else profile.approval_date.isoformat(),
+            "highest_floor": profile.highest_floor,
+            "heating": profile.heating,
+            "hall_type": profile.hall_type,
+            "builder": profile.builder,
+            "developer": profile.developer,
+            "management": profile.management,
+            "sale_type": profile.sale_type,
+            "age": age,
+            "area_bands": bands,
+            "source": profile_record.source if profile_record is not None else None,
+            "fetched_at": profile_record.fetched_at if profile_record is not None else None,
+        },
+        "observed_area_groups": observed,
+    }
+
+
+def _profile_age(approval_date: date | None, as_of: date) -> dict[str, int | str] | None:
+    """Return completed calendar years/months from approval through an as-of date."""
+    if approval_date is None or approval_date > as_of:
+        return None
+    total_months = (as_of.year - approval_date.year) * 12 + as_of.month - approval_date.month
+    if as_of.day < approval_date.day:
+        total_months -= 1
+    years, months_remaining = divmod(total_months, 12)
+    return {
+        "elapsed_years": years,
+        "elapsed_months": months_remaining,
+        "as_of": as_of.isoformat(),
+    }
 
 
 def _form_period(start: str, end: str, fallback: AnalysisPeriod) -> AnalysisPeriod:

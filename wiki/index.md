@@ -7,6 +7,7 @@ Start with the topic closest to the question, follow its graph connections, and 
 ## Domain
 
 - [Apartment identity](domain/apartment-identity.md) — How records from different sources are resolved to one analysis subject.
+- [Apartment profile](domain/apartment-profile.md) — Source-labelled complex facts and area evidence granularity.
 - [Area group](domain/area-group.md) — How raw exclusive areas, market-facing groups, and analysis populations relate.
 - [Analysis context](domain/analysis-context.md) — The conditions required to interpret and reproduce an analysis result.
 
@@ -27,7 +28,7 @@ Start with the topic closest to the question, follow its graph connections, and 
 - [Regional ingestion and screening](project/regional-ingestion-and-screening.md) — M5 bounded data and scalar filters.
 - [Regional relative analysis](project/regional-relative-analysis.md) — M6 distributions, empirical percentiles, and pairwise correlations for explicit peer groups.
 - [MVP knowledge map](project/mvp-knowledge-map.md) — End-to-end dependency map for the initial product outcome.
-- [Requirement map](project/requirement-map.md) — Cross-cutting relationships among the twenty-six catalogued requirements.
+- [Requirement map](project/requirement-map.md) — Cross-cutting relationships among the twenty-nine catalogued requirements.
 - [Open decision map](project/open-decision-map.md) — Unresolved questions and the concepts they currently affect.
 - [Local runtime configuration](project/local-runtime-configuration.md) — Server-side credential loading and local workspace configuration invariants.
 - [Saved apartment interests](project/saved-apartment-interests.md) — Accepted preference-only saved complexes in the local workspace.

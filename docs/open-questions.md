@@ -152,3 +152,34 @@ Sparse monthly observations can dominate the MDD result while representing a sin
 ### Status
 
 Unresolved.
+
+## OQ-010: Exact area-by-household inventory source
+
+### Question
+
+Should the project integrate authoritative exact unit-area household inventory
+alongside K-APT's broad area bands, and if so, how?
+
+### Why it matters
+
+Users may want exact area-type composition, but transaction observations are
+not a complete inventory and K-APT's bands do not provide exact unit counts.
+
+### Evidence and candidate sources
+
+Building HUB [building-register API](https://www.data.go.kr/data/15134735/openapi.do)
+records such as `전유부` + `전유공용면적`, or [housing-permit API](https://www.data.go.kr/data/15136560/openapi.do)
+records such as `호별개요` plus unit area, could support exact aggregation.
+This is research context only, not an accepted implementation.
+
+### Risks and evidence needed
+
+Any future integration needs conservative K-APT complex-to-lot/building-ledger
+identity, residential exclusive-area filtering, one stable unit key,
+change/cancellation handling, pagination and quota handling, multi-lot/building
+coverage, and reconciliation against known total households.
+
+### Status
+
+Unresolved. No Building HUB client, credentials, schema, or automatic acquisition
+is authorized by R-029.
