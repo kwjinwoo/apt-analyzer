@@ -3,7 +3,7 @@ title: Open Decision Map
 type: project
 role: topic
 status: active
-updated: 2026-09-08
+updated: 2026-09-09
 aliases:
   - Open-question graph
   - Unresolved policy map
@@ -33,7 +33,7 @@ Open questions are high-impact graph nodes because one decision can cascade acro
 | OQ-007 Outlier comparison | Transaction quality, price summaries, MDD |
 | OQ-008 Area-filtered turnover | Area group, denominator scope, turnover presentation |
 | OQ-009 Monthly evidence threshold | Price-series evidence, MDD qualification, visualization |
-| OQ-010 Exact area-by-household inventory source | Apartment profile, household inventory granularity, Building HUB identity and reconciliation |
+| OQ-010 Exact area-by-household inventory source (resolved by ADR-0016) | Apartment profile, household inventory granularity, Building HUB identity and reconciliation |
 
 When a question is resolved, the accepted ADR becomes the authority, affected living pages receive cascade updates, and this table points to the ADR instead of deleting the historical relationship.
 
@@ -52,7 +52,7 @@ When a question is resolved, the accepted ADR becomes the authority, affected li
 
 ## Decisions and open questions
 
-- OQ-001 is resolved for the initial version; OQ-002 through OQ-010 remain unresolved as of 2026-09-08.
+- OQ-001 is resolved for the initial version; OQ-002 through OQ-009 remain unresolved. OQ-010 is resolved by [ADR-0016](../../docs/decisions/ADR-0016-exact-area-inventory-source.md); empirical source validation remains a follow-up.
 - [ADR-0010](../../docs/decisions/ADR-0010-completed-month-rolling-analysis.md) accepts completed-month defaults while OQ-004 remains unresolved for arbitrary partial-year annualization.
 
 ## Evidence and interpretation risks
@@ -64,7 +64,7 @@ When a question is resolved, the accepted ADR becomes the authority, affected li
 
 ## Verify in the repository
 
-No implementation evidence exists yet. When code appears, check that unresolved candidates have not been embedded as invisible defaults and that accepted ADRs have representative tests.
+The accepted inventory direction has representative source, persistence, and web tests linked from [R-030](../../docs/requirements/R-030-exact-area-inventory.md).
 
 ## Related pages
 

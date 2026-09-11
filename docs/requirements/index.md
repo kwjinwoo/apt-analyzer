@@ -45,6 +45,7 @@ Use [TEMPLATE.md](TEMPLATE.md) when adding a requirement.
 | [R-027](R-027-chart-preview-turnover.md) | Duration-aware chart preview turnover | superseded | P1 | Superseded by R-028 retention split |
 | [R-028](R-028-chart-preview-retention-split.md) | Duration-aware chart preview retention split | accepted | P1 | User-approved 24-month preview retention interpretation |
 | [R-029](R-029-apartment-profile.md) | Persisted apartment-complex profile | accepted | P1 | User-approved result-profile direction |
+| [R-030](R-030-exact-area-inventory.md) | Exact exclusive-area household inventory | accepted | P1 | User-approved OQ-010 resolution |
 
 ## Change policy
 

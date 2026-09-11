@@ -3,7 +3,7 @@ title: Apartment Identity
 type: domain
 role: topic
 status: active
-updated: 2026-09-08
+updated: 2026-09-09
 aliases:
   - Complex identity
   - Internal apartment ID
@@ -28,6 +28,8 @@ An identity error has a larger blast radius than an ordinary parsing error: it c
 
 Optional K-APT profile facts are persisted only after explicit identity-resolved
 selection or refresh and remain source-labelled; see [Apartment profile](apartment-profile.md).
+Building HUB inventory adds a stricter parent-graph and attached-lot scope for
+exact areas; see [Exact area inventory](exact-area-inventory.md).
 
 ## Graph connections
 
@@ -43,11 +45,13 @@ selection or refresh and remain source-labelled; see [Apartment profile](apartme
 - [R-016: Apartment comparison](../../docs/requirements/R-016-apartment-comparison.md)
 - [R-023: Saved apartment interests](../../docs/requirements/R-023-saved-apartment-interests.md)
 - [R-029: Persisted apartment-complex profile](../../docs/requirements/R-029-apartment-profile.md)
+- [R-030: Exact exclusive-area household inventory](../../docs/requirements/R-030-exact-area-inventory.md)
 
 ## Decisions and open questions
 
 - [OQ-001: Stable apartment identity](../../docs/open-questions.md#oq-001-stable-apartment-identity)
 - ADR-0003 resolves OQ-001 for the initial version; renamed-complex continuity remains a limitation.
+- [ADR-0016](../../docs/decisions/ADR-0016-exact-area-inventory-source.md) governs Building HUB scope and conservative reconciliation.
 - [ADR-0009](../../docs/decisions/ADR-0009-explicit-transaction-name-aliases.md) governs the narrow verified alias exception and conservative unmapped-component failure.
 
 ## Evidence and interpretation risks

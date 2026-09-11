@@ -3,7 +3,7 @@ title: Area Group
 type: domain
 role: topic
 status: active
-updated: 2026-08-22
+updated: 2026-09-09
 aliases:
   - Exclusive-area group
   - Area classification
@@ -19,6 +19,8 @@ tags:
 An area group connects precise source-reported exclusive areas to a market-facing selection used to define one analysis population.
 
 ## Knowledge
+
+Building HUB exact inventory counts are separate whole-complex evidence; see [Exact area inventory](exact-area-inventory.md). They do not change transaction grouping or create an area-specific turnover denominator.
 
 Raw exclusive area and area group are different facts. The raw value preserves source precision; the derived group supports selection and comparison. Grouping values such as `84.81`, `84.92`, and `84.97` can be useful, but the boundary between nearby values is not universally determined by rounding.
 

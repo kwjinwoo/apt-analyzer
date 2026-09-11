@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 import urllib.error
 import urllib.request
@@ -53,10 +54,31 @@ class SourceResult:
     fetched_at: datetime
     query: tuple[tuple[str, str], ...]
     from_cache: bool = False
+    total_count: int | None = None
+    page_no: int | None = None
+    num_of_rows: int | None = None
 
 
 Transport = Callable[[str, float], bytes]
 RequestObserver = Callable[[str], None]
+RequestGuard = Callable[[], None]
+
+
+def _lookup_json(value: Mapping[str, object], key: str) -> str | None:
+    """Return a scalar pagination value from a response body."""
+    raw = value.get(key)
+    return str(raw) if raw is not None else None
+
+
+def _optional_int(value: object) -> int | None:
+    """Parse optional non-negative pagination metadata."""
+    if value is None:
+        return None
+    try:
+        parsed = int(str(value).strip())
+    except TypeError, ValueError:
+        return None
+    return parsed if parsed >= 0 else None
 
 
 class DataGoKrClient:
@@ -68,8 +90,13 @@ class DataGoKrClient:
         *,
         transport: Transport | None = None,
         retries: int = 2,
+        retry_backoff: float = 0.05,
         timeout: float = 10.0,
+        min_interval: float = 0.0,
+        sleeper: Callable[[float], None] = time.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
         request_observer: RequestObserver | None = None,
+        request_guard: RequestGuard | None = None,
     ) -> None:
         """Configure credentials, transport limits, and an in-memory cache."""
         if not service_key.strip():
@@ -77,8 +104,18 @@ class DataGoKrClient:
         self._key = service_key.strip()
         self._transport = transport or self._urlopen
         self._retries = retries
+        if not math.isfinite(retry_backoff) or not math.isfinite(min_interval):
+            raise ValueError("retry and pacing values must be finite")
+        if retries < 0 or retry_backoff < 0 or min_interval < 0:
+            raise ValueError("retry and pacing values must be non-negative")
+        self._retry_backoff = retry_backoff
+        self._min_interval = min_interval
+        self._sleeper = sleeper
+        self._monotonic = monotonic
+        self._last_request_at: float | None = None
         self._timeout = timeout
         self._request_observer = request_observer
+        self._request_guard = request_guard
         self._cache: dict[str, SourceResult] = {}
 
     def build_url(self, endpoint: str, params: Mapping[str, str]) -> str:
@@ -94,6 +131,7 @@ class DataGoKrClient:
         *,
         source: str,
         use_cache: bool = True,
+        request_guard: RequestGuard | None = None,
     ) -> SourceResult:
         """Fetch and parse XML using bounded retries for transient failures."""
         url = self.build_url(endpoint, params)
@@ -106,12 +144,25 @@ class DataGoKrClient:
                 cached.fetched_at,
                 cached.query,
                 from_cache=True,
+                total_count=cached.total_count,
+                page_no=cached.page_no,
+                num_of_rows=cached.num_of_rows,
             )
         for attempt in range(self._retries + 1):
             try:
+                guard = request_guard or self._request_guard
+                if guard is not None:
+                    guard()
+                if self._last_request_at is not None:
+                    wait = self._min_interval - (self._monotonic() - self._last_request_at)
+                    if wait > 0:
+                        self._sleeper(wait)
+                self._last_request_at = self._monotonic()
                 if self._request_observer is not None:
                     self._request_observer(endpoint)
                 payload = self._transport(url, self._timeout)
+                if not payload.strip():
+                    raise AvailabilityError("official source returned an empty response")
                 result = self.parse_xml(payload, source=source, query=params)
                 self._cache[url] = result
                 return result
@@ -120,7 +171,7 @@ class DataGoKrClient:
             except (urllib.error.URLError, TimeoutError, AvailabilityError) as error:
                 if attempt == self._retries:
                     raise AvailabilityError("official source unavailable after retries") from error
-                time.sleep(0.05 * (attempt + 1))
+                self._sleeper(self._retry_backoff * (2**attempt))
         raise AssertionError("unreachable")
 
     def parse_xml(
@@ -146,12 +197,18 @@ class DataGoKrClient:
             raise ProtocolError(f"source rejected request ({code or 'missing code'})")
         items = root.findall(".//items/item") or root.findall("./body/item")
         records = tuple({child.tag: (child.text or "").strip() for child in item} for item in items)
+        total_count = _optional_int(root.findtext(".//totalCount"))
+        page_no = _optional_int(root.findtext(".//pageNo"))
+        num_of_rows = _optional_int(root.findtext(".//numOfRows"))
         return SourceResult(
             SourceOutcome.RECORDS if records else SourceOutcome.EMPTY,
             records,
             source,
             datetime.now(UTC),
             tuple(sorted((query or {}).items())),
+            total_count=total_count,
+            page_no=page_no,
+            num_of_rows=num_of_rows,
         )
 
     def _parse_json(self, payload: bytes, source: str, query: Mapping[str, str]) -> SourceResult:
@@ -184,6 +241,9 @@ class DataGoKrClient:
             source,
             datetime.now(UTC),
             tuple(sorted(query.items())),
+            total_count=_optional_int(_lookup_json(body, "totalCount")),
+            page_no=_optional_int(_lookup_json(body, "pageNo")),
+            num_of_rows=_optional_int(_lookup_json(body, "numOfRows")),
         )
 
     @staticmethod

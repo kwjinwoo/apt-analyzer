@@ -8,7 +8,7 @@ import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -19,9 +19,16 @@ from apt_analyzer.apartment_data import (
     AreaHouseholdBand,
     months,
 )
+from apt_analyzer.building_hub import (
+    InventoryPage,
+    InventoryRow,
+    InventoryScope,
+    InventoryState,
+    InventorySummary,
+)
 from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 SEOUL = ZoneInfo("Asia/Seoul")
 
 
@@ -81,6 +88,353 @@ class ApartmentProfileRecord:
     profile: ApartmentProfile
     source: str
     fetched_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryRecord:
+    """Persisted exact-area inventory summary and its acquisition status."""
+
+    summary: InventorySummary
+    source: str
+    fetched_at: str
+
+
+def _inventory_summary_json(summary: InventorySummary) -> str:
+    """Encode the complete inventory evidence using JSON-safe exact values."""
+
+    def timestamp(value: datetime | None) -> str | None:
+        return value.isoformat() if value is not None else None
+
+    scope = None
+    if summary.scope is not None:
+        scope = {
+            "root_key": summary.scope.root_key,
+            "title_keys": list(summary.scope.title_keys),
+            "unit_keys": list(summary.scope.unit_keys),
+            "required_lots": [list(lot) for lot in summary.scope.required_lots],
+            "candidates": list(summary.scope.candidates),
+            "complete": summary.scope.complete,
+            "issues": list(summary.scope.issues),
+            "mapping_version": summary.scope.mapping_version,
+        }
+    payload = {
+        "state": summary.state.value,
+        "rows": [
+            {
+                "unit_key": row.unit_key,
+                "building": row.building,
+                "unit": row.unit,
+                "area_sqm": str(row.area_sqm),
+            }
+            for row in summary.rows
+        ],
+        "counts": [[str(area), count] for area, count in summary.counts],
+        "total_count": summary.total_count,
+        "reason": summary.reason,
+        "collected_at": timestamp(summary.collected_at),
+        "source": summary.source,
+        "reference_date": summary.reference_date,
+        "normalization_version": summary.normalization_version,
+        "mapping_version": summary.mapping_version,
+        "scope": scope,
+        "data_complete": summary.data_complete,
+        "kapt_total": summary.kapt_total,
+        "kapt_bands": [[label, count] for label, count in summary.kapt_bands],
+        "pages": [
+            {
+                "operation": page.operation,
+                "lot": list(page.lot),
+                "page_no": page.page_no,
+                "page_size": page.page_size,
+                "total_count": page.total_count,
+                "record_count": page.record_count,
+                "fetched_at": page.fetched_at.isoformat(),
+            }
+            for page in summary.pages
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+
+
+def _inventory_summary_from_json(payload: str) -> InventorySummary:
+    """Decode and validate a complete persisted inventory summary."""
+
+    def reject_constant(value: str) -> object:
+        raise ValueError(f"invalid inventory JSON constant: {value}")
+
+    raw_value: object = json.loads(payload, parse_constant=reject_constant)
+    if not isinstance(raw_value, dict):
+        raise ValueError("invalid persisted inventory summary")
+    raw = cast(dict[str, object], raw_value)
+
+    def text(name: str, required: bool = False) -> str | None:
+        value = raw.get(name)
+        if isinstance(value, str) and value:
+            return value
+        if required:
+            raise ValueError(f"invalid inventory field: {name}")
+        return None
+
+    state_raw = text("state", True)
+    try:
+        state = InventoryState(cast(str, state_raw))
+    except ValueError as exc:
+        raise ValueError("invalid persisted inventory state") from exc
+    rows_raw = raw.get("rows", [])
+    counts_raw = raw.get("counts", [])
+    if not isinstance(rows_raw, list) or not isinstance(counts_raw, list):
+        raise ValueError("invalid persisted inventory rows")
+    row_items: list[object] = cast(list[object], rows_raw)
+    count_items: list[object] = cast(list[object], counts_raw)
+    rows: list[InventoryRow] = []
+    for item in row_items:
+        if not isinstance(item, dict):
+            raise ValueError("invalid persisted inventory row")
+        row = cast(dict[str, object], item)
+        unit_key = row.get("unit_key")
+        building = row.get("building")
+        unit = row.get("unit")
+        area_raw = row.get("area_sqm")
+        if not all(isinstance(v, str) and v for v in (unit_key, building, unit, area_raw)):
+            raise ValueError("invalid persisted inventory row")
+        try:
+            area = Decimal(cast(str, area_raw))
+        except InvalidOperation as exc:
+            raise ValueError("invalid persisted inventory area") from exc
+        if not area.is_finite() or area <= 0:
+            raise ValueError("invalid persisted inventory area")
+        rows.append(InventoryRow(cast(str, unit_key), cast(str, building), cast(str, unit), area))
+    counts: list[tuple[Decimal, int]] = []
+    for item in count_items:
+        if not isinstance(item, list):
+            raise ValueError("invalid persisted inventory counts")
+        pair: list[object] = cast(list[object], item)
+        if (
+            len(pair) != 2
+            or not isinstance(pair[0], str)
+            or not isinstance(pair[1], int)
+            or isinstance(pair[1], bool)
+            or pair[1] <= 0
+        ):
+            raise ValueError("invalid persisted inventory counts")
+        area = Decimal(pair[0])
+        if not area.is_finite() or area <= 0:
+            raise ValueError("invalid persisted inventory count area")
+        counts.append((area, pair[1]))
+    scope_raw = raw.get("scope")
+    scope = None
+    if scope_raw is not None:
+        if not isinstance(scope_raw, dict):
+            raise ValueError("invalid persisted inventory scope")
+        s = cast(dict[str, object], scope_raw)
+
+        def strings(name: str) -> tuple[str, ...]:
+            value = s.get(name, [])
+            if not isinstance(value, list):
+                raise ValueError("invalid persisted inventory scope")
+            values: list[object] = cast(list[object], value)
+            if not all(isinstance(v, str) for v in values):
+                raise ValueError("invalid persisted inventory scope")
+            return tuple(v for v in values if isinstance(v, str))
+
+        lots_raw = s.get("required_lots", [])
+        lot_items: list[object] = cast(list[object], lots_raw) if isinstance(lots_raw, list) else []
+        if not isinstance(lots_raw, list):
+            raise ValueError("invalid persisted inventory scope lots")
+        typed_lots: list[tuple[str, str, str, str, str]] = []
+        for value in lot_items:
+            if not isinstance(value, list):
+                raise ValueError("invalid persisted inventory scope lots")
+            parts: list[object] = cast(list[object], value)
+            if len(parts) != 5 or not all(isinstance(part, str) for part in parts):
+                raise ValueError("invalid persisted inventory scope lots")
+            typed_lots.append(
+                cast(
+                    tuple[str, str, str, str, str],
+                    tuple(part for part in parts if isinstance(part, str)),
+                )
+            )
+        root = s.get("root_key")
+        if root is not None and not isinstance(root, str):
+            raise ValueError("invalid persisted inventory scope root")
+        complete = s.get("complete")
+        if not isinstance(complete, bool):
+            raise ValueError("invalid persisted inventory scope completeness")
+        mapping_version = s.get("mapping_version", "mapping-v1")
+        if not isinstance(mapping_version, str) or not mapping_version:
+            raise ValueError("invalid persisted inventory scope mapping version")
+        scope = InventoryScope(
+            root,
+            strings("title_keys"),
+            strings("unit_keys"),
+            tuple(typed_lots),
+            strings("candidates"),
+            complete,
+            strings("issues"),
+            mapping_version,
+        )
+    collected_raw = raw.get("collected_at")
+    collected = None
+    if collected_raw is not None:
+        if not isinstance(collected_raw, str):
+            raise ValueError("invalid inventory collection time")
+        collected = datetime.fromisoformat(collected_raw)
+        if collected.tzinfo is None:
+            raise ValueError("inventory collection time must be timezone-aware")
+    pages_raw = raw.get("pages", [])
+    if not isinstance(pages_raw, list):
+        raise ValueError("invalid inventory pages")
+    page_items: list[object] = cast(list[object], pages_raw)
+    pages: list[InventoryPage] = []
+    for item in page_items:
+        if not isinstance(item, dict):
+            raise ValueError("invalid inventory page")
+        p = cast(dict[str, object], item)
+        lot = p.get("lot")
+        if not isinstance(lot, list):
+            raise ValueError("invalid inventory page lot")
+        lot_parts: list[object] = cast(list[object], lot)
+        if len(lot_parts) != 5 or not all(isinstance(x, str) for x in lot_parts):
+            raise ValueError("invalid inventory page lot")
+        page_lot = cast(
+            tuple[str, str, str, str, str], tuple(x for x in lot_parts if isinstance(x, str))
+        )
+        vals = [
+            p.get(k)
+            for k in (
+                "operation",
+                "page_no",
+                "page_size",
+                "total_count",
+                "record_count",
+                "fetched_at",
+            )
+        ]
+        if (
+            not isinstance(vals[0], str)
+            or not all(isinstance(v, int) and not isinstance(v, bool) for v in vals[1:5])
+            or not isinstance(vals[5], str)
+        ):
+            raise ValueError("invalid inventory page")
+        page_no, page_size, page_total, page_records = (
+            cast(int, vals[1]),
+            cast(int, vals[2]),
+            cast(int, vals[3]),
+            cast(int, vals[4]),
+        )
+        if (
+            page_no <= 0
+            or page_size <= 0
+            or page_total < 0
+            or page_records < 0
+            or page_records > page_size
+            or page_records > page_total
+        ):
+            raise ValueError("invalid inventory page")
+        page_time = datetime.fromisoformat(vals[5])
+        if page_time.tzinfo is None:
+            raise ValueError("inventory page time must be timezone-aware")
+        pages.append(
+            InventoryPage(
+                vals[0],
+                page_lot,
+                page_no,
+                page_size,
+                page_total,
+                page_records,
+                page_time,
+            )
+        )
+    total = raw.get("total_count")
+    if total is not None and (not isinstance(total, int) or isinstance(total, bool) or total < 0):
+        raise ValueError("invalid inventory total")
+    kapt_total = raw.get("kapt_total")
+    if kapt_total is not None and (
+        not isinstance(kapt_total, int) or isinstance(kapt_total, bool) or kapt_total < 0
+    ):
+        raise ValueError("invalid K-APT total")
+    bands_raw = raw.get("kapt_bands", [])
+    if not isinstance(bands_raw, list):
+        raise ValueError("invalid K-APT bands")
+    band_items: list[object] = cast(list[object], bands_raw)
+    parsed_bands: list[tuple[str, int]] = []
+    for item in band_items:
+        if not isinstance(item, list):
+            raise ValueError("invalid K-APT bands")
+        pair: list[object] = cast(list[object], item)
+        if (
+            len(pair) != 2
+            or not isinstance(pair[0], str)
+            or not isinstance(pair[1], int)
+            or isinstance(pair[1], bool)
+        ):
+            raise ValueError("invalid K-APT bands")
+        if pair[1] < 0:
+            raise ValueError("invalid K-APT bands")
+        parsed_bands.append((pair[0], pair[1]))
+    bands = tuple(parsed_bands)
+    raw_data_complete = raw.get("data_complete", False)
+    if not isinstance(raw_data_complete, bool):
+        raise ValueError("invalid inventory completeness")
+    summary = InventorySummary(
+        state,
+        tuple(rows),
+        tuple(counts),
+        total,
+        text("reason"),
+        collected,
+        text("source") or "Building HUB building register",
+        None,
+        text("normalization_version") or "inventory-v1",
+        text("mapping_version") or "mapping-v1",
+        scope,
+        raw_data_complete,
+        kapt_total,
+        bands,
+        tuple(pages),
+    )
+    _validate_inventory_summary(summary)
+    return summary
+
+
+def _validate_inventory_summary(summary: InventorySummary) -> None:
+    """Reject summaries that cannot be safely persisted as normalized evidence."""
+    if len({row.unit_key for row in summary.rows}) != len(summary.rows):
+        raise ValueError("inventory rows must have unique unit keys")
+    histogram: dict[Decimal, int] = {}
+    for row in summary.rows:
+        if not row.area_sqm.is_finite() or row.area_sqm <= 0:
+            raise ValueError("inventory areas must be finite and positive")
+        histogram[row.area_sqm] = histogram.get(row.area_sqm, 0) + 1
+    if tuple(summary.counts) != tuple(sorted(histogram.items())):
+        raise ValueError("inventory counts do not match row histogram")
+    if summary.total_count is not None and summary.total_count != len(summary.rows):
+        raise ValueError("inventory total does not match rows")
+    if summary.state is InventoryState.VERIFIED and (
+        summary.scope is None
+        or not summary.scope.complete
+        or not summary.data_complete
+        or not summary.rows
+        or summary.kapt_total != summary.total_count
+    ):
+        raise ValueError(
+            "verified inventory requires complete scope, data, and K-APT reconciliation"
+        )
+    if summary.state is InventoryState.VERIFIED:
+        calculated = {"≤60㎡": 0, ">60–85㎡": 0, ">85–135㎡": 0, ">135㎡": 0}
+        for area, count in summary.counts:
+            label = (
+                "≤60㎡"
+                if area <= 60
+                else ">60–85㎡"
+                if area <= 85
+                else ">85–135㎡"
+                if area <= 135
+                else ">135㎡"
+            )
+            calculated[label] += count
+        if any(calculated.get(label) != count for label, count in summary.kapt_bands):
+            raise ValueError("verified inventory bands do not match K-APT")
 
 
 class SQLiteStore:
@@ -269,6 +623,99 @@ class SQLiteStore:
             area_bands=tuple(bands),
         )
         return ApartmentProfileRecord(profile, str(row["source"]), str(row["fetched_at"]))
+
+    def save_inventory(self, apartment_id: str, summary: InventorySummary, *, source: str) -> None:
+        """Atomically save a verified inventory and always retain the latest attempt."""
+        if not apartment_id.strip() or not source.strip():
+            raise ValueError("inventory source must not be empty")
+        if summary.collected_at is None or summary.collected_at.tzinfo is None:
+            raise ValueError("inventory collection time must be timezone-aware")
+        if not summary.source.strip():
+            raise ValueError("inventory summary source must not be empty")
+        _validate_inventory_summary(summary)
+        fetched_at = summary.collected_at.isoformat()
+        payload = _inventory_summary_json(summary)
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO inventory_attempts(apartment_id,status,reason,summary_json,source,fetched_at) VALUES (?,?,?,?,?,?)",
+                (
+                    apartment_id,
+                    summary.state.value,
+                    summary.reason,
+                    payload,
+                    source,
+                    fetched_at,
+                ),
+            )
+            if summary.state is InventoryState.VERIFIED:
+                self._connection.execute(
+                    "DELETE FROM inventory_rows WHERE apartment_id=?", (apartment_id,)
+                )
+                for row in summary.rows:
+                    self._connection.execute(
+                        "INSERT INTO inventory_rows(apartment_id,unit_key,building,unit,area_sqm) VALUES (?,?,?,?,?)",
+                        (apartment_id, row.unit_key, row.building, row.unit, str(row.area_sqm)),
+                    )
+                self._connection.execute(
+                    "INSERT INTO inventory_snapshots(apartment_id,status,total_count,summary_json,source,fetched_at) VALUES (?,?,?,?,?,?) "
+                    "ON CONFLICT(apartment_id) DO UPDATE SET status=excluded.status,total_count=excluded.total_count,summary_json=excluded.summary_json,source=excluded.source,fetched_at=excluded.fetched_at",
+                    (
+                        apartment_id,
+                        summary.state.value,
+                        summary.total_count,
+                        payload,
+                        source,
+                        fetched_at,
+                    ),
+                )
+
+    def load_inventory(self, apartment_id: str) -> InventoryRecord | None:
+        """Load the last verified inventory without external access."""
+        snapshot = self._connection.execute(
+            "SELECT status,total_count,summary_json,source,fetched_at FROM inventory_snapshots WHERE apartment_id=?",
+            (apartment_id,),
+        ).fetchone()
+        if snapshot is None:
+            return None
+        if snapshot["summary_json"]:
+            summary = _inventory_summary_from_json(str(snapshot["summary_json"]))
+            return InventoryRecord(summary, str(snapshot["source"]), str(snapshot["fetched_at"]))
+        rows = tuple(
+            InventoryRow(
+                str(row["unit_key"]),
+                str(row["building"]),
+                str(row["unit"]),
+                Decimal(str(row["area_sqm"])),
+            )
+            for row in self._connection.execute(
+                "SELECT unit_key,building,unit,area_sqm FROM inventory_rows WHERE apartment_id=? ORDER BY area_sqm,unit_key",
+                (apartment_id,),
+            )
+        )
+        counts: dict[Decimal, int] = {}
+        for row in rows:
+            counts[row.area_sqm] = counts.get(row.area_sqm, 0) + 1
+        summary = InventorySummary(
+            InventoryState(str(snapshot["status"])),
+            rows,
+            tuple(sorted(counts.items())),
+            snapshot["total_count"],
+        )
+        return InventoryRecord(summary, str(snapshot["source"]), str(snapshot["fetched_at"]))
+
+    def load_inventory_attempt(self, apartment_id: str) -> InventoryRecord | None:
+        """Return the latest attempt status, reason, and timestamp."""
+        row = self._connection.execute(
+            "SELECT status,summary_json,source,fetched_at FROM inventory_attempts WHERE apartment_id=? ORDER BY id DESC LIMIT 1",
+            (apartment_id,),
+        ).fetchone()
+        if row is None or not row["summary_json"]:
+            return None
+        return InventoryRecord(
+            _inventory_summary_from_json(str(row["summary_json"])),
+            str(row["source"]),
+            str(row["fetched_at"]),
+        )
 
     def load_household_evidence(self, apartment_id: str) -> HouseholdEvidenceRecord | None:
         """Load persisted household evidence without contacting an external source."""
@@ -738,10 +1185,11 @@ class SQLiteStore:
             self._migrate_v5()
             self._migrate_v6()
             self._migrate_v7()
+            self._migrate_v8()
             self._connection.commit()
             return
         version = int(row[0])
-        if version not in (1, 2, 3, 4, 5, 6, CURRENT_SCHEMA_VERSION):
+        if version not in (1, 2, 3, 4, 5, 6, 7, CURRENT_SCHEMA_VERSION):
             raise ValueError(f"unsupported schema version: {version}")
         if version == 1:
             self._migrate_v1()
@@ -756,6 +1204,7 @@ class SQLiteStore:
         self._migrate_v5()
         self._migrate_v6()
         self._migrate_v7()
+        self._migrate_v8()
         self._connection.commit()
 
     def _migrate_v3(self) -> None:
@@ -846,6 +1295,41 @@ class SQLiteStore:
                 source TEXT NOT NULL, fetched_at TEXT NOT NULL
             ); UPDATE schema_version SET version=7;"""
         )
+
+    def _migrate_v8(self) -> None:
+        """Add independent exact-area inventory snapshots and attempt history."""
+        self._connection.executescript(
+            """CREATE TABLE IF NOT EXISTS inventory_snapshots (
+                apartment_id TEXT PRIMARY KEY, status TEXT NOT NULL, total_count INTEGER,
+                summary_json TEXT, source TEXT NOT NULL, fetched_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS inventory_rows (
+                apartment_id TEXT NOT NULL, unit_key TEXT NOT NULL, building TEXT NOT NULL,
+                unit TEXT NOT NULL, area_sqm TEXT NOT NULL,
+                PRIMARY KEY(apartment_id, unit_key)
+            );
+            CREATE TABLE IF NOT EXISTS inventory_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, apartment_id TEXT NOT NULL,
+                status TEXT NOT NULL, reason TEXT, summary_json TEXT, source TEXT NOT NULL DEFAULT '', fetched_at TEXT NOT NULL
+            );
+            UPDATE schema_version SET version=8;"""
+        )
+        columns = {
+            str(row["name"])
+            for row in self._connection.execute("PRAGMA table_info(inventory_attempts)")
+        }
+        if "summary_json" not in columns:
+            self._connection.execute("ALTER TABLE inventory_attempts ADD COLUMN summary_json TEXT")
+        if "source" not in columns:
+            self._connection.execute(
+                "ALTER TABLE inventory_attempts ADD COLUMN source TEXT NOT NULL DEFAULT ''"
+            )
+        snapshot_columns = {
+            str(row["name"])
+            for row in self._connection.execute("PRAGMA table_info(inventory_snapshots)")
+        }
+        if "summary_json" not in snapshot_columns:
+            self._connection.execute("ALTER TABLE inventory_snapshots ADD COLUMN summary_json TEXT")
 
     def _migrate_v1(self) -> None:
         """Migrate legacy data atomically with deterministic duplicate collapse."""

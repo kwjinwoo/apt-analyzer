@@ -48,6 +48,16 @@ from apt_analyzer.apartment_data import (
     months,
     normalize_name,
 )
+from apt_analyzer.building_hub import (
+    BASE_URL as BUILDING_HUB_BASE_URL,
+)
+from apt_analyzer.building_hub import (
+    BuildingHubClient,
+    BuildingInventoryService,
+    InventoryState,
+    InventorySummary,
+    reconcile_inventory,
+)
 from apt_analyzer.cli import comparison_to_dict, json_value, result_to_dict
 from apt_analyzer.comparison import CommonAnalysisConfig, compare
 from apt_analyzer.domain import (
@@ -102,6 +112,11 @@ _UI_LABELS = {
     "compared": "비교 완료",
     "unavailable": "사용 불가",
     "valid_empty": "유효한 빈 결과",
+    "verified": "검증 완료",
+    "partial": "부분 수집",
+    "mismatch": "근거 불일치",
+    "empty": "유효한 빈 결과",
+    "mapping_required": "단지 식별 필요",
     "fresh": "최신 데이터",
     "stale": "오래된 데이터",
     "failed": "실패",
@@ -177,6 +192,7 @@ _API_SERVICES = (
     ("kapt_list", "K-APT 단지 목록", "APT_ANALYZER_KAPT_LIST_DAILY_LIMIT", 5_000),
     ("kapt_detail", "K-APT 기본정보", "APT_ANALYZER_KAPT_DETAIL_DAILY_LIMIT", 5_000),
     ("molit_trade", "국토부 아파트 매매", "APT_ANALYZER_MOLIT_TRADE_DAILY_LIMIT", 10_000),
+    ("building_hub", "건축HUB 건축물대장", "APT_ANALYZER_BUILDING_HUB_DAILY_LIMIT", 10_000),
 )
 _ENDPOINT_TO_API_SERVICE = {
     KAPT_LIST_ENDPOINT: "kapt_list",
@@ -202,6 +218,20 @@ class SearchService(Protocol):
         self, candidate: ApartmentCandidate, apartment: Apartment, period: AnalysisPeriod
     ) -> tuple[NormalizedTransaction, ...]:
         """Retrieve normalized evidence for the requested period."""
+        ...
+
+
+class InventoryService(Protocol):
+    """Explicit exact-area inventory refresh boundary."""
+
+    def collect(
+        self,
+        candidate: ApartmentCandidate,
+        *,
+        kapt_total: int | None = None,
+        kapt_bands: tuple[tuple[str, int], ...] = (),
+    ) -> InventorySummary:
+        """Collect one selected apartment's current inventory."""
         ...
 
 
@@ -322,6 +352,7 @@ def create_app(
     store: SQLiteStore | None = None,
     search_clock: Callable[[], datetime] | None = None,
     analysis_today: Callable[[], date] | None = None,
+    inventory_service: InventoryService | None = None,
 ) -> FastAPI:
     """Create the local app with deterministic dependency injection."""
     app = FastAPI(title="apt-analyzer local web")
@@ -340,6 +371,7 @@ def create_app(
     app.state.usage_store = owned_store
     app.state.usage_limits = limits
     service = search_service or _default_service(owned_store)
+    inventory = inventory_service or _default_inventory_service(owned_store)
     today = analysis_today or date.today
     if search_service is None or hasattr(service, "list_region"):
         service = _PersistentProvinceSearch(
@@ -496,10 +528,77 @@ def create_app(
             )
             workspace.candidate = enriched
             workspace.status = "selected"
+            persisted_inventory = owned_store.load_inventory(workspace.apartment.internal_id)
+            if persisted_inventory is None:
+                persisted_inventory = owned_store.load_inventory_attempt(
+                    workspace.apartment.internal_id
+                )
+            if persisted_inventory is not None:
+                reconciled = reconcile_inventory(
+                    persisted_inventory.summary,
+                    kapt_total=enriched.household_count,
+                    kapt_bands=tuple(
+                        (band.label, band.count)
+                        for band in (enriched.profile.area_bands if enriched.profile else ())
+                    ),
+                )
+                owned_store.save_inventory(
+                    workspace.apartment.internal_id,
+                    reconciled,
+                    source=persisted_inventory.source,
+                )
         except Exception as error:  # noqa: BLE001 - explicit source action is user-visible
             workspace.status = "failed"
             return _page(request, templates, workspace, (), {"error": str(error)})
         return _page(request, templates, workspace, ())
+
+    @app.post("/inventory/refresh", response_class=HTMLResponse)
+    def refresh_inventory(request: Request) -> HTMLResponse:
+        """Explicitly refresh the selected complex's exact-area inventory."""
+        if workspace.candidate is None or workspace.apartment is None:
+            return _page(request, templates, workspace, (), {"error": "먼저 단지를 선택해 주세요."})
+        candidate = workspace.candidate
+        apartment = workspace.apartment
+        household = owned_store.load_household_evidence(apartment.internal_id)
+        profile = owned_store.load_profile(apartment.internal_id)
+        kapt_total = None if household is None else household.count
+        bands = (
+            ()
+            if profile is None
+            else tuple((band.label, band.count) for band in profile.profile.area_bands)
+        )
+        try:
+            result = inventory.collect(candidate, kapt_total=kapt_total, kapt_bands=bands)
+            if (
+                workspace.apartment.internal_id != apartment.internal_id
+                or workspace.candidate.source_id != candidate.source_id
+            ):
+                return _page(
+                    request,
+                    templates,
+                    workspace,
+                    (),
+                    {"error": "선택한 단지가 변경되어 수집 결과를 저장하지 않았습니다."},
+                )
+            owned_store.save_inventory(apartment.internal_id, result, source=result.source)
+        except Exception:  # noqa: BLE001 - explicit source boundary
+            result = InventorySummary(
+                InventoryState.UNAVAILABLE,
+                (),
+                (),
+                None,
+                "건축물대장 수집을 완료하지 못했습니다.",
+                datetime.now(UTC),
+            )
+            owned_store.save_inventory(apartment.internal_id, result, source="Building HUB")
+            return _page(
+                request,
+                templates,
+                workspace,
+                (),
+                {"error": "건축물대장 수집을 완료하지 못했습니다."},
+            )
+        return _page(request, templates, workspace, (), {"inventory_refresh": result.state.value})
 
     @app.post("/interests/remove", response_class=HTMLResponse)
     def remove_interest(request: Request, apartment_id: str = Form(...)) -> HTMLResponse:
@@ -729,6 +828,8 @@ def create_app(
             persisted_household,
             result.population.eligible,
             analysis_date,
+            owned_store.load_inventory(workspace.apartment.internal_id),
+            owned_store.load_inventory_attempt(workspace.apartment.internal_id),
         )
         app.state.last_result["data_status"] = (
             "coverage-limited"
@@ -1435,6 +1536,7 @@ def create_app(
         export,
         screening,
         comparison,
+        refresh_inventory,
     )
     return app
 
@@ -1467,6 +1569,16 @@ def _page(
         if workspace.apartment is None
         else usage_store.load_household_evidence(workspace.apartment.internal_id)
     )
+    inventory_record = (
+        None
+        if workspace.apartment is None
+        else usage_store.load_inventory(workspace.apartment.internal_id)
+    )
+    inventory_attempt = (
+        None
+        if workspace.apartment is None
+        else usage_store.load_inventory_attempt(workspace.apartment.internal_id)
+    )
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -1481,6 +1593,8 @@ def _page(
             "comparison_area_groups": _comparison_area_groups(workspace),
             "interests": usage_store.list_interests(),
             "household_evidence": household_evidence,
+            "inventory_record": inventory_record,
+            "inventory_attempt": inventory_attempt,
             "ui": {
                 "labels": _UI_LABELS,
                 "metric_labels": _UI_METRIC_LABELS,
@@ -1490,6 +1604,7 @@ def _page(
             },
             "format_percentage": _format_percentage,
             "format_krw": _format_krw,
+            "inventory_reason": _inventory_reason,
             "asset_version": request.app.state.asset_version,
         },
     )
@@ -1562,6 +1677,8 @@ def _complex_profile_dict(
     persisted_household: HouseholdEvidenceRecord | None,
     eligible: tuple[NormalizedTransaction, ...],
     as_of: date,
+    inventory_record: object = None,
+    inventory_attempt: object = None,
 ) -> dict[str, object]:
     """Serialize persisted complex facts and current transaction-area observations."""
     profile: ApartmentProfile | None = None if profile_record is None else profile_record.profile
@@ -1601,6 +1718,7 @@ def _complex_profile_dict(
         }
         for group in discover_area_groups(eligible)
     ]
+    inventory = _inventory_dict(inventory_record, inventory_attempt)
     return {
         "apartment": {
             "id": apartment.internal_id,
@@ -1635,7 +1753,58 @@ def _complex_profile_dict(
             "fetched_at": profile_record.fetched_at if profile_record is not None else None,
         },
         "observed_area_groups": observed,
+        "inventory": inventory,
     }
+
+
+def _inventory_dict(record: object, attempt: object) -> dict[str, object] | None:
+    """Serialize aggregate inventory evidence without unit-level identifiers."""
+    from apt_analyzer.persistence import InventoryRecord
+
+    if not isinstance(record, InventoryRecord) and not isinstance(attempt, InventoryRecord):
+        return None
+    current = record if isinstance(record, InventoryRecord) else attempt
+    assert isinstance(current, InventoryRecord)
+    summary = current.summary
+    total = summary.total_count
+    return {
+        "status": summary.state.value,
+        "total": total if isinstance(record, InventoryRecord) else None,
+        "counts": [
+            {
+                "area_sqm": str(area),
+                "count": count,
+                "share_percent": None if not total else f"{count * 100 / total:.2f}",
+            }
+            for area, count in (summary.counts if isinstance(record, InventoryRecord) else ())
+        ],
+        "source": current.source,
+        "collected_at": current.fetched_at,
+        "scope": "선택 단지 전체" if summary.scope and summary.scope.complete else "확인 필요",
+        "latest_attempt": None
+        if not isinstance(attempt, InventoryRecord)
+        else {
+            "status": attempt.summary.state.value,
+            "reason": _inventory_reason(attempt.summary.reason),
+            "collected_at": attempt.fetched_at,
+        },
+    }
+
+
+def _inventory_reason(reason: str | None) -> str | None:
+    """Translate stable source-boundary reasons for product presentation."""
+    if reason is None:
+        return None
+    labels = {
+        "inventory count differs from K-APT total": "건축물대장 세대수가 K-APT 전체 세대수와 다릅니다.",
+        "inventory area bands differ from K-APT": "건축물대장 면적대가 K-APT 근거와 다릅니다.",
+        "K-APT total household evidence is missing": "K-APT 전체 세대수 근거가 없습니다.",
+        "Building HUB collection failed": "건축물대장 수집에 실패했습니다.",
+        "Building HUB collection request limit reached": "건축물대장 요청 한도에 도달했습니다.",
+        "lot collection limit exceeded": "확인할 필지 범위를 완료하지 못했습니다.",
+        "Building HUB scope is incomplete": "건축물대장 단지 범위를 완전히 확인하지 못했습니다.",
+    }
+    return labels.get(reason, reason)
 
 
 def _profile_age(approval_date: date | None, as_of: date) -> dict[str, int | str] | None:
@@ -1723,6 +1892,53 @@ def _daily_api_limits() -> dict[str, int]:
             raise ValueError(f"{env_name} must be a positive integer")
         values[service_id] = value
     return values
+
+
+def _default_inventory_service(store: SQLiteStore | None = None) -> InventoryService:
+    """Build the explicit Building HUB client using the configured shared key."""
+    from apt_analyzer.acquisition import AuthenticationError, DataGoKrClient, load_service_key
+
+    try:
+        key = os.environ.get("BUILDING_HUB_SERVICE_KEY") or load_service_key()
+    except AuthenticationError:
+        return _MissingInventoryService()
+
+    def observe(endpoint: str) -> None:
+        if endpoint.startswith(BUILDING_HUB_BASE_URL) and store is not None:
+            store.increment_api_usage("building_hub")
+
+    return BuildingInventoryService(
+        BuildingHubClient(
+            DataGoKrClient(
+                key,
+                retries=5,
+                retry_backoff=0.5,
+                min_interval=0.25,
+                request_observer=observe,
+            )
+        )
+    )
+
+
+class _MissingInventoryService:
+    """Return a safe unavailable result when no service credential is configured."""
+
+    def collect(
+        self,
+        candidate: ApartmentCandidate,
+        *,
+        kapt_total: int | None = None,
+        kapt_bands: tuple[tuple[str, int], ...] = (),
+    ) -> InventorySummary:
+        del candidate, kapt_total, kapt_bands
+        return InventorySummary(
+            InventoryState.UNAVAILABLE,
+            (),
+            (),
+            None,
+            "건축물대장 서비스 설정이 없습니다.",
+            datetime.now(UTC),
+        )
 
 
 def _default_service(store: SQLiteStore | None = None) -> SearchService:

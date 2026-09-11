@@ -194,6 +194,47 @@
                             <progress aria-label="K-APT 단지 기본정보 갱신 중"></progress><span>K-APT 단지 기본정보를 확인 중입니다.</span>
                         </div>
                     </form>
+                    <section aria-labelledby="inventory-heading">
+                        <h3 id="inventory-heading">면적별 세대수</h3>
+                        <form method="post"
+                              action="/inventory/refresh"
+                              hx-post="/inventory/refresh"
+                              hx-target="#workspace"
+                              hx-swap="outerHTML"
+                              hx-indicator="#inventory-progress"
+                              hx-disabled-elt="find button">
+                            <button type="submit" class="secondary">전용면적별 세대수 갱신</button>
+                            <div id="inventory-progress"
+                                 class="request-progress htmx-indicator"
+                                 role="status"
+                                 aria-live="polite">
+                                <progress aria-label="면적별 세대수 갱신 중"></progress><span>건축물대장을 확인 중입니다.</span>
+                            </div>
+                        </form>
+                        {% if inventory_record and inventory_record.summary.state.value == "verified" %}
+                            <div class="table-wrap inventory-table-wrap">
+                                <table>
+                                    <caption>건축물대장 검증 결과 · 범위: 선택 단지 전체</caption>
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">전용면적</th>
+                                            <th scope="col">세대수</th>
+                                            <th scope="col">비율</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for area, count in inventory_record.summary.counts %}<tr><th scope="row">{{ area }}㎡</th><td>{{ count }}세대</td><td>{{ "%.2f"|format(count * 100 / inventory_record.summary.total_count) }}%</td></tr>{% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="help">출처: {{ inventory_record.source }} · 확인 시각: {{ inventory_record.fetched_at }} · 범위: 선택 단지 전체</p>
+                        {% elif inventory_record %}
+                            <p class="help">면적별 세대수 상태: {{ ui.labels.get(inventory_record.summary.state.value, inventory_record.summary.state.value) }}</p>
+                        {% endif %}
+                        {% if inventory_attempt and (not inventory_record or inventory_attempt.fetched_at != inventory_record.fetched_at) %}
+                            <p class="help">최근 면적별 세대수 시도: {{ ui.labels.get(inventory_attempt.summary.state.value, inventory_attempt.summary.state.value) }} · {{ inventory_reason(inventory_attempt.summary.reason) or "확인됨" }} · {{ inventory_attempt.fetched_at }}</p>
+                        {% endif %}
+                    </section>
                     <form method="post"
                           action="/update"
                           hx-post="/update"

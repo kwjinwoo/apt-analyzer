@@ -179,7 +179,17 @@ identity, residential exclusive-area filtering, one stable unit key,
 change/cancellation handling, pagination and quota handling, multi-lot/building
 coverage, and reconciliation against known total households.
 
+### Resolution
+
+Resolved by [R-030](requirements/R-030-exact-area-inventory.md) and
+[ADR-0016](decisions/ADR-0016-exact-area-inventory-source.md): use Building HUB
+for explicitly refreshed, conservatively mapped exact exclusive-area inventory.
+Registration completed, and bounded live validation succeeded on 2026-09-09 for
+구의현대2단지, 구의현대6단지, and 현대3. The remaining empirical concerns are
+source schema/data evolution and the observed 구의현대6단지 421-versus-423
+reconciliation mismatch; synthetic fixtures remain separate from live evidence.
+
 ### Status
 
-Unresolved. No Building HUB client, credentials, schema, or automatic acquisition
-is authorized by R-029.
+Resolved direction; continue bounded revalidation when source schema or data
+behavior changes.
