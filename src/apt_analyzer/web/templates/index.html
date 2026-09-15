@@ -556,7 +556,7 @@
                                         <td data-label="결과">{{ format_percentage(result.turnover.value) if result.turnover and result.turnover.value is not none else ("계산 불가: " ~ labels.get(result.turnover.unavailable.reason, result.turnover.unavailable.reason) if result.turnover and result.turnover.unavailable else "계산 불가: 거래회전율은 완전한 연속 12개월이 필요합니다") }}</td>
                                         <td data-label="계산 근거">{{ result.turnover.eligible_count if result.turnover else "-" }}건 / {{ result.turnover.household.count if result.turnover else "-" }}세대</td>
                                         <td data-label="적용 기간">{{ result.ui_context.metric_periods.turnover.start ~ " ~ " ~ result.ui_context.metric_periods.turnover.end if result.ui_context.metric_periods.turnover else "-" }}</td>
-                                        <td data-label="해석">전체 단지 거래 활동{% if result.turnover and result.turnover.unavailable and result.turnover.unavailable.reason == "household denominator is missing or invalid" %}<br>{% if result.ui_context.area_group_key == "all" %}분석 전 K-APT 세대수 근거를 갱신해 주세요.{% else %}선택한 면적 그룹의 세대수 근거가 필요합니다.{% endif %}{% endif %}</td>
+                                        <td data-label="해석">{{ "전체 단지 거래 활동" if result.ui_context.area_group_key == "all" else "선택 면적 그룹 거래 활동" }}{% if result.turnover and result.turnover.unavailable and result.turnover.unavailable.reason == "household denominator is missing or invalid" %}<br>{% if result.ui_context.area_group_key == "all" %}분석 전 K-APT 세대수 근거를 갱신해 주세요.{% else %}선택한 면적 그룹의 세대수 근거가 필요합니다.{% endif %}{% endif %}</td>
                                     </tr>
                                     <tr>
                                         <th scope="row" data-label="지표">거래유지율</th>
@@ -598,7 +598,7 @@
                                     </tr>
                                     <tr>
                                         <th scope="row">세대수 근거</th>
-                                        <td>{{ (result.ui_context.household.count|string) ~ "세대 · 전체 단지 · " ~ (result.ui_context.household.source or "-") if result.ui_context.household.scope == "complex" and result.ui_context.household.count else (result.ui_context.household.count or "-") ~ " · " ~ result.ui_context.household.scope ~ " · " ~ (result.ui_context.household.source or "-") }}</td>
+                                        <td>{{ (result.ui_context.household.count|string) ~ "세대 · 전체 단지 · " ~ (result.ui_context.household.source or "-") if result.ui_context.household.scope == "complex" and result.ui_context.household.count else (result.ui_context.household.count or "-") ~ " · " ~ result.ui_context.household.scope ~ " · " ~ (result.ui_context.household.source or "-") }}{% if result.ui_context.household.fetched_at %}<br>확인 시각: {{ result.ui_context.household.fetched_at }}{% endif %}</td>
                                     </tr>
                                     {% for name,source in result.ui_context.metric_period_sources.items() %}
                                         <tr>

@@ -27,6 +27,7 @@ from apt_analyzer.analytics import (
     ROLLING_TURNOVER_METHOD,
     AnalysisResult,
     DataCoverageStatus,
+    ExclusiveAreaGroupingPolicy,
     HouseholdEvidence,
     analyze,
     build_population,
@@ -64,12 +65,18 @@ from apt_analyzer.domain import (
     AnalysisContext,
     AnalysisPeriod,
     Apartment,
+    AreaGroup,
     AreaSelection,
     NormalizedTransaction,
     TransactionInclusionPolicy,
     TransactionType,
 )
-from apt_analyzer.persistence import ApartmentProfileRecord, HouseholdEvidenceRecord, SQLiteStore
+from apt_analyzer.persistence import (
+    ApartmentProfileRecord,
+    HouseholdEvidenceRecord,
+    InventoryRecord,
+    SQLiteStore,
+)
 from apt_analyzer.regional_screening import (
     SUPPORTED_METHODS,
     SUPPORTED_UNITS,
@@ -771,6 +778,7 @@ def create_app(
         default_baseline_period = rolling_periods.baseline
         default_comparison_period = rolling_periods.turnover
         persisted_household = owned_store.load_household_evidence(workspace.apartment.internal_id)
+        persisted_inventory = owned_store.load_inventory(workspace.apartment.internal_id)
         effective_household_count = household_count
         effective_household_scope = household_scope
         effective_household_source = household_source or None
@@ -784,9 +792,29 @@ def create_app(
             effective_household_count = persisted_household.count
             effective_household_scope = persisted_household.scope
             effective_household_source = persisted_household.source
-        if group is not None and household_count is None:
-            effective_household_count = None
-            effective_household_source = None
+        derived_inventory = False
+        derived_inventory_fetched_at: str | None = None
+        if group is not None:
+            derived = _inventory_group_households(persisted_inventory, group)
+            if derived is not None and (
+                effective_household_count is None
+                or effective_household_scope == "complex"
+                or (
+                    effective_household_count == derived[0]
+                    and effective_household_scope == derived[1]
+                    and effective_household_source == derived[2]
+                )
+            ):
+                effective_household_count, effective_household_scope, effective_household_source = (
+                    derived
+                )
+                derived_inventory = True
+                derived_inventory_fetched_at = (
+                    persisted_inventory.fetched_at if persisted_inventory else None
+                )
+            elif effective_household_count is None and effective_household_scope != group.key:
+                effective_household_count = None
+                effective_household_source = None
         result = analyze(
             transactions,
             context,
@@ -818,17 +846,27 @@ def create_app(
         )
         workspace.status = "unavailable" if not complete_coverage else "analyzed"
         app.state.last_result = result_to_dict(result)
+        profile_household_count = (
+            persisted_household.count
+            if persisted_household is not None and persisted_household.scope == "complex"
+            else None
+        )
+        profile_household_source = (
+            persisted_household.source
+            if persisted_household is not None and persisted_household.scope == "complex"
+            else None
+        )
         app.state.last_result["complex_profile"] = _complex_profile_dict(
             workspace.candidate,
             workspace.apartment,
             owned_store.load_profile(workspace.apartment.internal_id),
-            effective_household_count,
-            effective_household_scope,
-            effective_household_source,
+            profile_household_count,
+            "complex",
+            profile_household_source,
             persisted_household,
             result.population.eligible,
             analysis_date,
-            owned_store.load_inventory(workspace.apartment.internal_id),
+            persisted_inventory,
             owned_store.load_inventory_attempt(workspace.apartment.internal_id),
         )
         app.state.last_result["data_status"] = (
@@ -914,6 +952,7 @@ def create_app(
                 "count": effective_household_count,
                 "scope": effective_household_scope,
                 "source": effective_household_source,
+                "fetched_at": derived_inventory_fetched_at if derived_inventory else None,
             },
             "metric_periods": {
                 name: value
@@ -1805,6 +1844,29 @@ def _inventory_reason(reason: str | None) -> str | None:
         "Building HUB scope is incomplete": "건축물대장 단지 범위를 완전히 확인하지 못했습니다.",
     }
     return labels.get(reason, reason)
+
+
+def _inventory_group_households(
+    record: InventoryRecord | None, group: AreaGroup
+) -> tuple[int, str, str] | None:
+    """Derive a selected integer-floor denominator from a verified snapshot."""
+    if record is None:
+        return None
+    if (
+        record.summary.state.value != "verified"
+        or record.summary.scope is None
+        or not record.summary.scope.complete
+    ):
+        return None
+    policy = ExclusiveAreaGroupingPolicy()
+    count = sum(
+        amount
+        for area, amount in record.summary.counts
+        if any(item.key == group.key for item in policy.group((area,)))
+    )
+    if count <= 0:
+        return None
+    return count, group.key, record.source
 
 
 def _profile_age(approval_date: date | None, as_of: date) -> dict[str, int | str] | None:

@@ -4,12 +4,12 @@ title: Multi-year turnover rate
 status: accepted
 priority: P0
 created: 2026-08-21
-updated: 2026-08-31
+updated: 2026-09-12
 origin: "Initial requirements R8"
 supersedes: []
 superseded_by: null
-related_requirements: [R-003, R-006, R-009, R-017, R-019]
-related_decisions: [ADR-0010]
+related_requirements: [R-003, R-006, R-009, R-017, R-019, R-031]
+related_decisions: [ADR-0010, ADR-0017]
 ---
 
 # R-008: Multi-year turnover rate
@@ -35,6 +35,7 @@ The user can obtain a turnover rate for a selected period, defined as annualized
   positive whole-complex household count, the local workspace persists that
   sourced denominator and can explicitly refresh it. Later analysis may use
   the persisted evidence without contacting the external source.
+- **AC-8:** A verified Building HUB snapshot may supply the matching denominator for a selected single-apartment area group.
 
 ## Constraints
 
@@ -59,11 +60,13 @@ The user can obtain a turnover rate for a selected period, defined as annualized
 ### Verification gaps
 
 - [`test_selected_kapt_households_are_persisted_and_used_offline_for_percent_metrics`](../../tests/test_web.py) covers selection-time persistence, persisted fallback, percentage presentation, and analysis/re-analysis without acquisition. [`test_explicit_household_refresh_preserves_last_good_evidence_on_failure`](../../tests/test_web.py) covers explicit refresh and last-good-evidence preservation. Legacy calendar-year calculations remain covered by the domain tests above.
+- [`test_verified_inventory_derives_floor_group_denominator_and_provenance`](../../tests/test_web.py) covers verified Building HUB area-group derivation, exact aggregation, provenance, and offline preview reuse.
 
 ## Open questions
 
 - [OQ-004: Partial-year annualization](../open-questions.md#oq-004-partial-year-annualization)
 - [OQ-008: Area-filtered turnover presentation](../open-questions.md#oq-008-area-filtered-turnover-presentation)
+- [ADR-0017: Verified exact inventory denominator](../decisions/ADR-0017-area-inventory-turnover-denominator.md)
 
 ## Related documentation
 

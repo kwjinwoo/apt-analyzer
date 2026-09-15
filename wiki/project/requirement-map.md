@@ -3,7 +3,7 @@ title: Requirement Map
 type: project
 role: topic
 status: active
-updated: 2026-09-09
+updated: 2026-09-12
 aliases:
   - Requirement knowledge graph
 tags:
@@ -58,6 +58,7 @@ Period-driven analysis
 Multi-complex use
   R-016 → R-015 → R-021
   R-030 → R-029/R-019/R-020
+  R-031 → R-006/R-008/R-030
 ```
 
 The arrows express knowledge dependency, not implementation order or control flow.
@@ -86,6 +87,8 @@ The arrows express knowledge dependency, not implementation order or control flo
 - Exact inventory is governed by [R-030](../../docs/requirements/R-030-exact-area-inventory.md)
   and [ADR-0016](../../docs/decisions/ADR-0016-exact-area-inventory-source.md),
   with navigation in [Exact area inventory](../domain/exact-area-inventory.md).
+- Area turnover denominator derivation is governed by [R-031](../../docs/requirements/R-031-area-group-inventory-denominator.md)
+  and [ADR-0017](../../docs/decisions/ADR-0017-area-inventory-turnover-denominator.md).
 - Regional descriptive interpretation extends through [Regional relative analysis](regional-relative-analysis.md).
 
 ## Requirements

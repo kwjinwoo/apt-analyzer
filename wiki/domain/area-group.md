@@ -3,7 +3,7 @@ title: Area Group
 type: domain
 role: topic
 status: active
-updated: 2026-09-09
+updated: 2026-09-12
 aliases:
   - Exclusive-area group
   - Area classification
@@ -20,7 +20,7 @@ An area group connects precise source-reported exclusive areas to a market-facin
 
 ## Knowledge
 
-Building HUB exact inventory counts are separate whole-complex evidence; see [Exact area inventory](exact-area-inventory.md). They do not change transaction grouping or create an area-specific turnover denominator.
+Building HUB exact inventory counts remain separate source evidence; see [Exact area inventory](exact-area-inventory.md). For a single-apartment analysis, a verified snapshot can supply the denominator for the selected integer-floor group by applying the active policy to all exact areas.
 
 Raw exclusive area and area group are different facts. The raw value preserves source precision; the derived group supports selection and comparison. Grouping values such as `84.81`, `84.92`, and `84.97` can be useful, but the boundary between nearby values is not universally determined by rounding.
 
@@ -47,7 +47,7 @@ The grouping policy must remain replaceable and independently testable. Integer-
 
 - [OQ-002: Area-group boundary](../../docs/open-questions.md#oq-002-area-group-boundary)
 - [OQ-008: Area-filtered turnover presentation](../../docs/open-questions.md#oq-008-area-filtered-turnover-presentation)
-- No area-grouping ADR has been accepted yet.
+- [ADR-0017: Verified exact inventory denominator](../../docs/decisions/ADR-0017-area-inventory-turnover-denominator.md)
 
 ## Evidence and interpretation risks
 

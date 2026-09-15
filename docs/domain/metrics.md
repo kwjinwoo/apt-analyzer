@@ -77,7 +77,7 @@ For a multi-year interval, the initial candidate annualization is total eligible
 
 ### Interpretation constraints
 
-Filtering transactions to an area group does not create an exact area-level turnover rate unless the denominator is the household count for that same area group. Until that denominator is available, distinguish whole-complex turnover from area-filtered transaction activity.
+Filtering transactions to an area group does not create an exact area-level turnover rate unless the denominator is the household count for that same area group. Until that denominator is available, distinguish whole-complex turnover from area-filtered transaction activity. For a single-apartment analysis, a verified Building HUB snapshot may provide that denominator by applying the active grouping policy to every exact inventory area; this is latest-query evidence, not a historical as-of inventory claim.
 
 An exact 12-consecutive-completed-month window uses rolling-turnover semantics;
 an adjacent completed 12-month baseline and comparison uses rolling-retention

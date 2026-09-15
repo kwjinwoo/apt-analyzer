@@ -4,12 +4,12 @@ title: Exact exclusive-area household inventory
 status: accepted
 priority: P1
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-12
 origin: User-approved OQ-010 resolution
 supersedes: []
 superseded_by: null
-related_requirements: [R-005, R-019, R-029]
-related_decisions: [ADR-0016]
+related_requirements: [R-005, R-019, R-029, R-031]
+related_decisions: [ADR-0016, ADR-0017]
 ---
 
 # R-030: Exact exclusive-area household inventory
@@ -34,12 +34,12 @@ Provide an explicit refresh that collects, validates, persists, and displays exa
 
 - Building HUB is primary; K-APT supplies identity, total, and broad-band reconciliation evidence.
 - `crtnDay` is a generation date, not an effective date. No historical completeness or ownership guarantee is made.
-- Inventory does not change turnover or other analysis denominators.
+- Inventory is not transaction-derived; a verified snapshot may supply the matching denominator for a selected single-apartment area turnover under [R-031](R-031-area-group-inventory-denominator.md).
 - Exact Decimal precision is preserved without rounding to types.
 
 ## Non-goals
 
-- Historical inventory reconstruction, lifecycle inference, inventory-derived turnover, automatic refresh, permit API mixing, grouping UX redesign, or comparison redesign.
+- Historical inventory reconstruction, lifecycle inference, all-complex inventory-derived turnover, automatic refresh, permit API mixing, grouping UX redesign, or comparison redesign.
 
 ## Verification
 

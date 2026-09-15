@@ -3,7 +3,7 @@ title: Open Decision Map
 type: project
 role: topic
 status: active
-updated: 2026-09-09
+updated: 2026-09-12
 aliases:
   - Open-question graph
   - Unresolved policy map
@@ -31,7 +31,7 @@ Open questions are high-impact graph nodes because one decision can cascade acro
 | OQ-005 Zero retention baseline | Retention result semantics |
 | OQ-006 Direct-transaction default | Transaction population, price series, every metric |
 | OQ-007 Outlier comparison | Transaction quality, price summaries, MDD |
-| OQ-008 Area-filtered turnover | Area group, denominator scope, turnover presentation |
+| OQ-008 Area-filtered turnover (resolved for single analysis by ADR-0017) | Area group, denominator scope, turnover presentation |
 | OQ-009 Monthly evidence threshold | Price-series evidence, MDD qualification, visualization |
 | OQ-010 Exact area-by-household inventory source (resolved by ADR-0016) | Apartment profile, household inventory granularity, Building HUB identity and reconciliation |
 

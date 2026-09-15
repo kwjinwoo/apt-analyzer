@@ -3,7 +3,7 @@ title: Analysis Context
 type: domain
 role: topic
 status: active
-updated: 2026-09-08
+updated: 2026-09-12
 aliases:
   - Metric context
   - Analysis configuration
@@ -38,6 +38,8 @@ evidence, but its values do not replace the official result or export.
 [R-029](../../docs/requirements/R-029-apartment-profile.md) adds source-labelled
 complex profile and official area-band evidence to single-apartment results,
 while keeping transaction-observed areas explicitly separate.
+
+[R-031](../../docs/requirements/R-031-area-group-inventory-denominator.md) adds verified Building HUB exact-area evidence for a selected single-apartment group. The context carries its group scope, source, count, and fetched time; it describes the latest verified query and does not claim historical as-of completeness.
 
 ## Graph connections
 

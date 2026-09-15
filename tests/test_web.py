@@ -17,12 +17,20 @@ from apt_analyzer.apartment_data import (
     IdentityResolution,
     ResolutionStatus,
 )
-from apt_analyzer.domain import AnalysisPeriod, Apartment, NormalizedTransaction, TransactionType
-from apt_analyzer.persistence import SQLiteStore
+from apt_analyzer.building_hub import InventoryRow, InventoryScope, InventoryState, InventorySummary
+from apt_analyzer.domain import (
+    AnalysisPeriod,
+    Apartment,
+    AreaGroup,
+    NormalizedTransaction,
+    TransactionType,
+)
+from apt_analyzer.persistence import InventoryRecord, SQLiteStore
 from apt_analyzer.web import (
     _ENDPOINT_TO_API_SERVICE,
     MissingKeyService,
     _default_service,
+    _inventory_group_households,
     _profile_age,
     _static_asset_version,
     create_app,
@@ -749,6 +757,167 @@ def test_persisted_complex_households_do_not_leak_into_area_group_turnover(tmp_p
     assert explicit_payload["turnover"]["value"] == "0.24"
     assert service.resolve_calls == 1
     assert service.retrieve_calls == 0
+
+
+def test_verified_inventory_derives_floor_group_denominator_and_provenance(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    apartment = Apartment("a", "Alpha")
+    source = "MOLIT apartment sale transactions"
+
+    def records(month: str) -> tuple[NormalizedTransaction, ...]:
+        year, month_number = int(month[:4]), int(month[4:])
+        transactions = [
+            NormalizedTransaction(
+                apartment.internal_id,
+                date(year, month_number, 15),
+                100_000_000,
+                Decimal("59.2"),
+                TransactionType.BROKERED,
+                False,
+                source_name=source,
+                source_record_id=month,
+            ),
+        ]
+        if month == "202301":
+            transactions.append(
+                NormalizedTransaction(
+                    apartment.internal_id,
+                    date(year, month_number, 20),
+                    100_000_000,
+                    Decimal("49.76"),
+                    TransactionType.BROKERED,
+                    False,
+                    source_name=source,
+                    source_record_id="49-202301",
+                )
+            )
+        return tuple(transactions)
+
+    store.update_incremental(
+        apartment, AnalysisPeriod(date(2023, 1, 1), date(2024, 12, 31)), records, source_name=source
+    )
+    store.save_profile_and_household(
+        apartment.internal_id,
+        ApartmentProfile(area_bands=(AreaHouseholdBand("≤60㎡", 1190),)),
+        1190,
+        household_source="K-APT",
+        profile_source="K-APT",
+    )
+    area_counts = (
+        (Decimal("49.76"), 76),
+        (Decimal("59.39"), 15),
+        (Decimal("59.80"), 195),
+        (Decimal("59.94"), 74),
+        (Decimal("59.99"), 830),
+    )
+    rows_list: list[InventoryRow] = []
+    index = 0
+    for area, count in area_counts:
+        for _ in range(count):
+            rows_list.append(InventoryRow(f"u{index}", "101", str(index), area))
+            index += 1
+    rows = tuple(rows_list)
+    summary = InventorySummary(
+        InventoryState.VERIFIED,
+        rows,
+        area_counts,
+        1190,
+        collected_at=datetime(2026, 9, 10, tzinfo=UTC),
+        source="Building HUB",
+        scope=InventoryScope("root", ("title",), ("u1",), (), (), True),
+        data_complete=True,
+        kapt_total=1190,
+        kapt_bands=(("≤60㎡", 1190),),
+    )
+    store.save_inventory(apartment.internal_id, summary, source="Building HUB")
+    client = TestClient(
+        create_app(
+            search_service=HouseholdSearch(1190),
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-59",
+            "household_count": "1190",
+            "household_scope": "complex",
+            "household_source": "K-APT",
+        },
+    )
+    payload = client.get("/export?kind=analysis").json()
+    assert response.status_code == 200
+    assert payload["ui_context"]["household"] == {
+        "count": 1114,
+        "scope": "floor-59",
+        "source": "Building HUB",
+        "fetched_at": "2026-09-10T00:00:00+00:00",
+    }
+    assert Decimal(payload["turnover"]["value"]) == Decimal("0.01077199281867145421903052065")
+    assert "1114" in response.text
+    assert "Building HUB" in response.text
+    assert "확인 시각: 2026-09-10T00:00:00+00:00" in response.text
+    assert "전체 세대수" in response.text
+    assert "1190세대" in response.text
+    assert "100.00%" in response.text
+    assert "선택 면적 그룹 거래 활동" in response.text
+    assert "세대수 근거가 필요" not in response.text
+
+    editor_round_trip = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-59",
+            "household_count": "1114",
+            "household_scope": "floor-59",
+            "household_source": "Building HUB",
+        },
+    )
+    assert editor_round_trip.status_code == 200
+    assert (
+        client.get("/export?kind=analysis").json()["ui_context"]["household"]
+        == payload["ui_context"]["household"]
+    )
+
+    preview = client.post(
+        "/analysis/preview",
+        data={"start": "2023-01-01", "end": "2024-12-31"},
+    )
+    assert preview.status_code == 200
+    assert Decimal(preview.json()["turnover"]["value"]) == Decimal(
+        "0.01077199281867145421903052065"
+    )
+    assert "1114세대" in preview.json()["turnover"]["evidence"]
+
+    floor_49 = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-49",
+            "household_count": "1190",
+            "household_scope": "complex",
+            "household_source": "K-APT",
+        },
+    )
+    assert floor_49.status_code == 200
+    floor_49_payload = client.get("/export?kind=analysis").json()
+    assert floor_49_payload["ui_context"]["household"]["count"] == 76
+    assert floor_49_payload["ui_context"]["household"]["scope"] == "floor-49"
+    assert Decimal(floor_49_payload["turnover"]["value"]) == Decimal("0")
+
+    all_area = client.post(
+        "/analysis",
+        data={"start": "2023-01-01", "end": "2024-12-31", "area_group": "all"},
+    )
+    assert all_area.status_code == 200
+    assert "전체 단지 거래 활동" in all_area.text
 
 
 def test_missing_complex_household_shows_refresh_guidance_and_machine_reason(tmp_path) -> None:
@@ -1802,3 +1971,76 @@ def test_comparison_preserves_valid_empty_subject_status() -> None:
     assert response.status_code == 200
     exported = client.get("/export?kind=comparison").json()
     assert all(subject["data_status"] == "valid_empty" for subject in exported["subjects"])
+
+
+def test_inventory_zero_matching_group_is_unavailable() -> None:
+    record = InventorySummary(
+        InventoryState.VERIFIED,
+        (InventoryRow("u1", "101", "1", Decimal("49.76")),),
+        ((Decimal("49.76"), 1),),
+        1,
+        collected_at=datetime(2026, 9, 10, tzinfo=UTC),
+        source="Building HUB",
+        scope=InventoryScope("root", ("title",), ("u1",), (), (), True),
+        data_complete=True,
+        kapt_total=1,
+        kapt_bands=(("≤60㎡", 1),),
+    )
+    group = AreaGroup("floor-59", "59㎡", frozenset({Decimal("59.2")}))
+    assert (
+        _inventory_group_households(
+            InventoryRecord(record, "Building HUB", "2026-09-10T00:00:00+00:00"), group
+        )
+        is None
+    )
+
+
+def test_manual_matching_group_source_does_not_receive_inventory_timestamp(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    apartment = Apartment("a", "Alpha")
+    _save_two_year_metric_evidence(store, apartment)
+    inventory_rows = tuple(
+        InventoryRow(f"u{index}", "101", str(index), Decimal("84.92")) for index in range(99)
+    )
+    inventory = InventorySummary(
+        InventoryState.VERIFIED,
+        inventory_rows,
+        ((Decimal("84.92"), 99),),
+        99,
+        collected_at=datetime(2026, 9, 10, tzinfo=UTC),
+        source="Building HUB",
+        scope=InventoryScope(
+            "root", ("title",), tuple(row.unit_key for row in inventory_rows), (), (), True
+        ),
+        data_complete=True,
+        kapt_total=99,
+        kapt_bands=((">60–85㎡", 99),),
+    )
+    store.save_inventory(apartment.internal_id, inventory, source="Building HUB")
+    client = TestClient(
+        create_app(
+            search_service=FakeSearch(),
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post(
+        "/analysis",
+        data={
+            "start": "2023-01-01",
+            "end": "2024-12-31",
+            "area_group": "floor-84",
+            "household_count": "100",
+            "household_scope": "floor-84",
+            "household_source": "Building HUB",
+        },
+    )
+    assert response.status_code == 200
+    assert client.get("/export?kind=analysis").json()["ui_context"]["household"] == {
+        "count": 100,
+        "scope": "floor-84",
+        "source": "Building HUB",
+        "fetched_at": None,
+    }

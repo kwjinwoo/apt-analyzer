@@ -3,7 +3,7 @@ title: Exact Area Inventory
 type: domain
 role: topic
 status: active
-updated: 2026-09-09
+updated: 2026-09-12
 aliases:
   - Building HUB inventory
 tags:
@@ -30,11 +30,13 @@ Exact exclusive-area household counts collected from the Building HUB register f
 ## Requirements
 
 - [R-030](../../docs/requirements/R-030-exact-area-inventory.md)
+- [R-031](../../docs/requirements/R-031-area-group-inventory-denominator.md)
 - [R-029](../../docs/requirements/R-029-apartment-profile.md)
 
 ## Decisions and open questions
 
 - [ADR-0016](../../docs/decisions/ADR-0016-exact-area-inventory-source.md)
+- [ADR-0017](../../docs/decisions/ADR-0017-area-inventory-turnover-denominator.md)
 - [OQ-010 resolution](../../docs/open-questions.md#oq-010-exact-area-by-household-inventory-source)
 
 ## Evidence and interpretation risks

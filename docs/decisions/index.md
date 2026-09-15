@@ -31,3 +31,4 @@ Once accepted, an ADR preserves the decision made at that time. Correcting wordi
 | [ADR-0014](ADR-0014-chart-preview-retention-split.md) | Chart preview 24-month retention split | accepted | 2026-09-07 |
 | [ADR-0015](ADR-0015-source-labeled-apartment-profile.md) | Source-labeled persisted apartment profile | accepted | 2026-09-08 |
 | [ADR-0016](ADR-0016-exact-area-inventory-source.md) | Building HUB exact-area inventory | accepted | 2026-09-09 |
+| [ADR-0017](ADR-0017-area-inventory-turnover-denominator.md) | Verified exact inventory denominator for area turnover | accepted | 2026-09-12 |

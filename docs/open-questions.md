@@ -129,7 +129,7 @@ What metric and label should be shown when transactions are filtered to an area 
 
 ### Why it matters
 
-Calling the result an area-level turnover rate would imply a denominator the project does not possess.
+Previously, calling the result an area-level turnover rate implied a denominator the project did not possess; that limitation is resolved for the verified single-apartment analysis case.
 
 ### Current constraint
 
@@ -137,7 +137,7 @@ The project must distinguish whole-complex turnover from area-filtered transacti
 
 ### Status
 
-Unresolved presentation and metric design.
+Resolved for the single-apartment selected-group case by [R-031](requirements/R-031-area-group-inventory-denominator.md) and [ADR-0017](decisions/ADR-0017-area-inventory-turnover-denominator.md). Comparison and screening remain outside this resolution.
 
 ## OQ-009: Minimum evidence for monthly price observations
 
@@ -170,7 +170,7 @@ not a complete inventory and K-APT's bands do not provide exact unit counts.
 Building HUB [building-register API](https://www.data.go.kr/data/15134735/openapi.do)
 records such as `전유부` + `전유공용면적`, or [housing-permit API](https://www.data.go.kr/data/15136560/openapi.do)
 records such as `호별개요` plus unit area, could support exact aggregation.
-This is research context only, not an accepted implementation.
+Building HUB is the accepted source under [R-030](requirements/R-030-exact-area-inventory.md); the housing-permit API remains a rejected alternative.
 
 ### Risks and evidence needed
 
