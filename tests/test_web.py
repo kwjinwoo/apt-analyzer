@@ -322,7 +322,8 @@ def test_selected_kapt_households_are_persisted_and_used_offline_for_percent_met
     ]
     assert "84㎡" in analyzed.text
     assert "세대수 근거: K-APT apartment basic information" in analyzed.text
-    assert "K-APT 공식 면적대별 세대 재고" in analyzed.text
+    assert "K-APT 면적 구간별 참고 근거" in analyzed.text
+    assert "검증된 전용면적별 세대수는 아직 확인되지 않았습니다" in analyzed.text
     assert "세대 재고나 단지 전체 구성의 증거가 아닙니다." in analyzed.text
     assert payload["turnover"]["value"] == "0.24"
     assert payload["retention"]["value"] == "2"
@@ -866,6 +867,11 @@ def test_verified_inventory_derives_floor_group_denominator_and_provenance(tmp_p
     assert "1190세대" in response.text
     assert "100.00%" in response.text
     assert "선택 면적 그룹 거래 활동" in response.text
+    assert "검증된 전용면적별 세대수" in response.text
+    assert "49.76㎡" in response.text and "76세대" in response.text
+    assert "59.99㎡" in response.text and "830세대" in response.text
+    assert "K-APT 면적 구간별 참고 근거" in response.text
+    assert "K-APT 공식 면적대별 세대 재고" not in response.text
     assert "세대수 근거가 필요" not in response.text
 
     editor_round_trip = client.post(
@@ -1993,6 +1999,44 @@ def test_inventory_zero_matching_group_is_unavailable() -> None:
         )
         is None
     )
+
+
+def test_verified_inventory_profile_is_visible_without_kapt_profile(tmp_path) -> None:
+    store = SQLiteStore(tmp_path / "data.db")
+    apartment = Apartment("a", "Alpha")
+    _save_two_year_metric_evidence(store, apartment)
+    summary = InventorySummary(
+        InventoryState.VERIFIED,
+        (InventoryRow("u1", "101", "1", Decimal("84.92")),),
+        ((Decimal("84.92"), 1),),
+        1,
+        collected_at=datetime(2026, 9, 10, tzinfo=UTC),
+        source="Building HUB",
+        scope=InventoryScope("root", ("title",), ("u1",), (), (), True),
+        data_complete=True,
+        kapt_total=1,
+        kapt_bands=((">60–85㎡", 1),),
+    )
+    store.save_inventory("a", summary, source="Building HUB")
+    client = TestClient(
+        create_app(
+            search_service=FakeSearch(),
+            store=store,
+            analysis_today=lambda: date(2025, 1, 15),
+        )
+    )
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post(
+        "/analysis",
+        data={"start": "2023-01-01", "end": "2024-12-31", "area_group": "floor-84"},
+    )
+    assert response.status_code == 200
+    assert "검증된 전용면적별 세대수" in response.text
+    assert "84.92㎡" in response.text
+    assert "Building HUB" in response.text
+    assert "2026-09-10T00:00:00+00:00" in response.text
+    assert "선택 단지 전체" in response.text
 
 
 def test_manual_matching_group_source_does_not_receive_inventory_timestamp(tmp_path) -> None:

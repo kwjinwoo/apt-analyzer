@@ -4,7 +4,7 @@ title: Exact exclusive-area household inventory
 status: accepted
 priority: P1
 created: 2026-09-09
-updated: 2026-09-12
+updated: 2026-09-15
 origin: User-approved OQ-010 resolution
 supersedes: []
 superseded_by: null
@@ -49,6 +49,7 @@ Provide an explicit refresh that collects, validates, persists, and displays exa
 - [Acquisition metadata tests](../../tests/test_acquisition.py) — AC-2.
 - [Inventory persistence tests](../../tests/test_inventory_persistence.py) — AC-1, AC-4.
 - [Web inventory tests](../../tests/test_web_inventory.py) — AC-1, AC-4, AC-5.
+- [`test_verified_inventory_derives_floor_group_denominator_and_provenance`](../../tests/test_web.py) — verified exact composition is presented with source, collection time, and exact-area shares; K-APT bands remain reference evidence.
 - [Web integration tests](../../tests/test_web.py) — AC-4.
 
 ### Manual or data validation

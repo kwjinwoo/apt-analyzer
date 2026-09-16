@@ -137,6 +137,37 @@ def test_failed_inventory_refresh_preserves_last_verified_table_and_shows_latest
     assert "사용 불가" in response.text
 
 
+def test_analysis_profile_keeps_exact_table_and_shows_newer_attempt_warning() -> None:
+    inventory = FakeInventory()
+    app, store = _prepared_app(inventory)
+    store.save_inventory("a", _verified_summary(), source="Building HUB")
+    failed = InventorySummary(
+        InventoryState.MISMATCH,
+        (InventoryRow("u1", "101", "1", Decimal("59.82")),),
+        ((Decimal("59.82"), 1),),
+        1,
+        "inventory count differs from K-APT total",
+        datetime(2026, 9, 10, tzinfo=UTC),
+        "Building HUB",
+        None,
+        "normalization-v2",
+        "mapping-v3",
+        InventoryScope("root", ("title",), ("u1",), (), (), True),
+        True,
+        2,
+    )
+    store.save_inventory("a", failed, source="Building HUB")
+    with TestClient(app) as client:
+        response = client.post(
+            "/analysis", data={"start": "2024-01-01", "end": "2024-12-31", "household_count": "1"}
+        )
+    assert response.status_code == 200
+    assert "검증된 전용면적별 세대수" in response.text
+    assert "59.82㎡" in response.text
+    assert "최근 면적별 세대수 갱신 시도" in response.text
+    assert "건축물대장 세대수가 K-APT 전체 세대수와 다릅니다." in response.text
+
+
 def test_selection_analysis_and_export_never_refresh_inventory() -> None:
     inventory = FakeInventory()
     app, _ = _prepared_app(inventory)

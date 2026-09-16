@@ -4,12 +4,12 @@ title: Persisted apartment-complex profile
 status: accepted
 priority: P1
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-09-15
 origin: User-approved apartment result profile direction
 supersedes: []
 superseded_by: null
-related_requirements: [R-001, R-019, R-020, R-023]
-related_decisions: [ADR-0015]
+related_requirements: [R-001, R-019, R-020, R-023, R-030, R-031]
+related_decisions: [ADR-0015, ADR-0016]
 ---
 
 # R-029: Persisted apartment-complex profile
@@ -31,8 +31,8 @@ identity, provenance, inventory granularity, and unavailable states explicit.
   and optional K-APT buildings, use-approval date, highest floor, heating,
   hall type, builder, developer, management, and sale type; when approval date
   is known it also shows completed elapsed years/months and the as-of date.
-- **AC-2:** It shows official K-APT area-band household counts and shares for
-  ≤60㎡, >60–85㎡, >85–135㎡, and >135㎡ when supplied.
+- **AC-2:** When a verified exact inventory exists, it is the primary area-by-household table with exact areas, counts, shares, Building HUB provenance, collection time, and whole-complex scope. K-APT broad bands remain secondary reference evidence labelled as comparison bands.
+- **AC-2a:** Without verified exact inventory, the result says exact composition is unverified and never presents K-APT broad bands as exact.
 - **AC-3:** Exact transaction-observed area groups are separately labelled as
   eligible trades, never as household inventory or complete unit composition.
 - **AC-4:** Missing or partial profile evidence remains usable and says what is

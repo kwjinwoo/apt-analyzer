@@ -3,7 +3,7 @@ title: Apartment Profile
 type: domain
 role: topic
 status: active
-updated: 2026-09-09
+updated: 2026-09-15
 aliases:
   - Complex profile
   - K-APT basic information
@@ -32,7 +32,7 @@ trigger acquisition during saved-interest selection or analysis.
 When approval is present, the result also derives completed elapsed years and
 months as of the current workspace as-of date; missing or future approval dates
 have no age.
-Exact unit-area inventory is the explicitly refreshed [Exact area inventory](exact-area-inventory.md), separate from profile bands and transaction observations.
+Exact unit-area inventory is the explicitly refreshed [Exact area inventory](exact-area-inventory.md), separate from profile bands and transaction observations. When verified, it is the primary exact composition table in the result; K-APT bands remain collapsed comparison references.
 
 ## Graph connections
 
@@ -54,6 +54,7 @@ Exact unit-area inventory is the explicitly refreshed [Exact area inventory](exa
 - [ADR-0003: Official sources and apartment identity](../../docs/decisions/ADR-0003-official-sources-and-apartment-identity.md)
 - [OQ-001: Stable apartment identity](../../docs/open-questions.md#oq-001-stable-apartment-identity)
 - [ADR-0016: Building HUB exact-area inventory](../../docs/decisions/ADR-0016-exact-area-inventory-source.md)
+- [ADR-0017: Verified exact inventory denominator](../../docs/decisions/ADR-0017-area-inventory-turnover-denominator.md)
 
 ## Evidence and interpretation risks
 

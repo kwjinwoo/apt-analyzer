@@ -486,19 +486,42 @@
                                 {% elif result.complex_profile.households.source %}
                                     <p class="help">세대수 근거: {{ result.complex_profile.households.source }} · 확인 시각: 사용자 입력</p>
                                 {% endif %}
+                                {% if result.complex_profile.inventory and result.complex_profile.inventory.status == "verified" and result.complex_profile.inventory.counts %}
+                                    <table class="complex-profile-bands">
+                                        <caption>검증된 전용면적별 세대수</caption>
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">전용면적</th>
+                                                <th scope="col">세대수</th>
+                                                <th scope="col">비중</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>{% for item in result.complex_profile.inventory.counts %}<tr><th scope="row">{{ item.area_sqm }}㎡</th><td>{{ item.count }}세대</td><td>{{ item.share_percent ~ "%" if item.share_percent is not none else "확인되지 않음" }}</td></tr>{% endfor %}</tbody>
+                                    </table>
+                                    <p class="help">출처: {{ result.complex_profile.inventory.source }} · 확인 시각: {{ result.complex_profile.inventory.collected_at }} · 범위: {{ result.complex_profile.inventory.scope }}</p>
+                                {% else %}
+                                    <p class="help">검증된 전용면적별 세대수는 아직 확인되지 않았습니다. 아래 K-APT 구간은 참고용 광범위 구간 근거입니다.</p>
+                                {% endif %}
+                                {% if result.complex_profile.inventory and result.complex_profile.inventory.latest_attempt and (result.complex_profile.inventory.status != "verified" or result.complex_profile.inventory.latest_attempt.collected_at != result.complex_profile.inventory.collected_at) %}
+                                    <p class="help inventory-attempt-warning">최근 면적별 세대수 갱신 시도: {{ labels.get(result.complex_profile.inventory.latest_attempt.status, result.complex_profile.inventory.latest_attempt.status) }} · {{ result.complex_profile.inventory.latest_attempt.reason or "사유 확인 필요" }} · {{ result.complex_profile.inventory.latest_attempt.collected_at }}</p>
+                                {% endif %}
                                 {% if result.complex_profile.profile %}
                                     {% if result.complex_profile.profile.area_bands %}
-                                        <table class="complex-profile-bands">
-                                            <caption>K-APT 공식 면적대별 세대 재고</caption>
-                                            <thead>
-                                                <tr>
-                                                    <th scope="col">면적대</th>
-                                                    <th scope="col">세대수</th>
-                                                    <th scope="col">비중</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>{% for band in result.complex_profile.profile.area_bands %}<tr><th scope="row">{{ band.label }}</th><td>{{ band.count }}세대</td><td>{{ band.share_percent ~ "%" if band.share_percent is not none else "확인되지 않음" }}</td></tr>{% endfor %}</tbody>
-                                        </table>{% else %}<p class="help">K-APT 면적대별 세대 구성은 확인되지 않았습니다.</p>{% endif %}
+                                        <details class="complex-profile-bands-reference">
+                                            <summary>K-APT 면적 구간별 참고 근거</summary>
+                                            <p class="help">K-APT 구간은 정확한 전용면적별 구성이 아닌 광범위 비교 구간입니다.</p>
+                                            <table class="complex-profile-bands">
+                                                <caption>K-APT 면적 구간별 참고 근거</caption>
+                                                <thead>
+                                                    <tr>
+                                                        <th scope="col">면적대</th>
+                                                        <th scope="col">세대수</th>
+                                                        <th scope="col">비중</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>{% for band in result.complex_profile.profile.area_bands %}<tr><th scope="row">{{ band.label }}</th><td>{{ band.count }}세대</td><td>{{ band.share_percent ~ "%" if band.share_percent is not none else "확인되지 않음" }}</td></tr>{% endfor %}</tbody>
+                                            </table>
+                                        </details>{% else %}<p class="help">K-APT 면적 구간별 참고 근거는 확인되지 않았습니다.</p>{% endif %}
                                     <dl class="complex-profile-facts">
                                         <dt>난방</dt>
                                         <dd>

@@ -3,7 +3,7 @@ title: Exact Area Inventory
 type: domain
 role: topic
 status: active
-updated: 2026-09-12
+updated: 2026-09-15
 aliases:
   - Building HUB inventory
 tags:
@@ -19,7 +19,7 @@ Exact exclusive-area household counts collected from the Building HUB register f
 
 ## Knowledge
 
-[R-030](../../docs/requirements/R-030-exact-area-inventory.md) and [ADR-0016](../../docs/decisions/ADR-0016-exact-area-inventory-source.md) establish explicit refresh, conservative graph scope, Decimal preservation, K-APT reconciliation, and separate last-good/latest-attempt evidence. Transactions and K-APT broad bands do not substitute for this inventory.
+[R-030](../../docs/requirements/R-030-exact-area-inventory.md) and [ADR-0016](../../docs/decisions/ADR-0016-exact-area-inventory-source.md) establish explicit refresh, conservative graph scope, Decimal preservation, K-APT reconciliation, and separate last-good/latest-attempt evidence. Verified exact counts are primary in the analysis profile; K-APT broad bands remain secondary reconciliation references and do not substitute for this inventory.
 
 ## Graph connections
 
