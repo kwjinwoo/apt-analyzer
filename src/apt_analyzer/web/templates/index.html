@@ -296,7 +296,7 @@
                           action="/analysis"
                           hx-post="/analysis"
                           hx-target="#workspace"
-                          hx-swap="outerHTML">
+                          hx-swap="outerHTML show:#analysis-result:top">
                         <fieldset>
                             <legend>기준 기간</legend>
                             <label>
@@ -413,9 +413,9 @@
                 </form>
                 </section>
             {% endif %}
-            {% if result and result.results is not defined and not result.get("update") and result.subjects is not defined %}
-                <section>
-                    <h2>
+            {% if result and not result.get("error") and result.results is not defined and not result.get("update") and result.subjects is not defined %}
+                <section id="analysis-result" aria-labelledby="analysis-result-heading">
+                    <h2 id="analysis-result-heading">
                         {% if result.config %}
                             공통 분석 조건
                         {% else %}
@@ -642,7 +642,7 @@
                           action="/analysis"
                           hx-post="/analysis"
                           hx-target="#workspace"
-                          hx-swap="outerHTML">
+                          hx-swap="outerHTML show:#analysis-result:top">
                         <fieldset>
                             <legend>결과에서 분석 기간 다시 설정</legend>
                             <label>

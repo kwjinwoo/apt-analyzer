@@ -1674,11 +1674,30 @@ def test_single_analysis_centers_overall_period_and_result_editor() -> None:
     assert selected.status_code == 200
     assert 'name="start"' in selected.text and 'name="end"' in selected.text
     assert "고급 분석 설정" in selected.text
+    assert 'hx-swap="outerHTML show:#analysis-result:top"' in selected.text
 
     client.post("/update", data={"start": "2024-01-01", "end": "2024-01-01"})
     result = client.post("/analysis", data={"start": "2024-01-01", "end": "2024-01-01"})
     assert 'id="analysis-result-editor"' in result.text
-    assert 'hx-post="/analysis"' in result.text
+    assert result.text.count('id="analysis-result"') == 1
+    assert 'aria-labelledby="analysis-result-heading"' in result.text
+    assert 'id="analysis-result-heading"' in result.text
+    assert 'hx-swap="outerHTML show:#analysis-result:top"' in result.text
+
+
+def test_analysis_validation_error_does_not_request_result_scrolling() -> None:
+    client = TestClient(create_app(search_service=FakeSearch(), store=SQLiteStore(":memory:")))
+    client.post("/search", data={"name": "Alpha", "sido_code": "11"})
+    client.post("/select", data={"source_id": "a"})
+    response = client.post(
+        "/analysis",
+        data={"start": "2024-01-01", "end": "2024-01-31", "turnover_start": "2024-01-01"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert "HX-Reswap" in response.headers
+    assert response.headers["HX-Reswap"] == "outerHTML"
+    assert 'id="analysis-result"' not in response.text
 
 
 def test_analysis_keeps_monthly_gap_without_retrieval() -> None:

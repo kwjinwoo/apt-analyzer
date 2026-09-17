@@ -767,13 +767,16 @@ def create_app(
             ("MDD", mdd_start, mdd_end),
         ):
             if bool(first) != bool(second):
-                return _page(
+                response = _page(
                     request,
                     templates,
                     workspace,
                     (),
                     {"error": f"{label} 시작일과 종료일을 함께 입력해 주세요."},
                 )
+                if request.headers.get("HX-Request") == "true":
+                    response.headers["HX-Reswap"] = "outerHTML"
+                return response
         complete_coverage = all(
             availability[item] in {"fresh", "skipped", "fetched", "valid_empty"}
             for item in requested_months

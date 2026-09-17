@@ -127,7 +127,13 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             analysis_form.locator('input[name="household_count"]').fill("100")
             analysis_form.locator('input[name="household_source"]').fill("fixture")
             analysis_form.get_by_role("button", name="분석 실행").click()
-            page.wait_for_timeout(1000)
+            page.wait_for_function(
+                "() => { const target = document.querySelector('#analysis-result'); "
+                "return target && Math.abs(target.getBoundingClientRect().top) <= 8; }"
+            )
+            initial_result_box = page.locator("#analysis-result").bounding_box()
+            assert initial_result_box is not None
+            assert -2 <= initial_result_box["y"] <= 8
             expect(page.locator("#price-chart")).to_have_count(1)
             expect(page.locator("#volume-chart")).to_have_count(1)
             expect(page.locator("#price-chart")).to_have_attribute("data-chart-ready", "true")
@@ -194,9 +200,17 @@ def test_browser_workspace_full_deterministic_flow() -> None:
             editor.locator('input[name="end"]').fill("2024-06-30")
             with page.expect_response(lambda item: item.url.endswith("/analysis")):
                 editor.get_by_role("button", name="이 기간으로 다시 분석").click()
-            expect(page.locator("details.monthly-evidence-details")).not_to_contain_text("2024-01")
             editor = page.locator("#analysis-result-editor")
             expect(editor.locator('input[name="start"]')).to_have_value("2024-02-01")
+            page.wait_for_function(
+                "() => { const target = document.querySelector('#analysis-result'); "
+                "return target && Math.abs(target.getBoundingClientRect().top) <= 8; }"
+            )
+            revised_result_box = page.locator("#analysis-result").bounding_box()
+            assert revised_result_box is not None
+            assert -2 <= revised_result_box["y"] <= 8
+            expect(page.locator("details.monthly-evidence-details")).not_to_contain_text("2024-01")
+            editor = page.locator("#analysis-result-editor")
             export_analysis = page.request.get(f"http://127.0.0.1:{port}/export?kind=analysis")
             assert (
                 export_analysis.ok
