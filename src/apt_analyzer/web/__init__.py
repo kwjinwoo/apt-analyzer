@@ -398,6 +398,10 @@ def create_app(
     def root(request: Request) -> HTMLResponse:
         return _page(request, templates, workspace, ())
 
+    @app.get("/screening", response_class=HTMLResponse)
+    def screening_page(request: Request) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        return _page(request, templates, workspace, (), template_name="screening.html")
+
     app.add_api_route("/health", lambda: {"status": "ok"})
 
     @app.post("/search", response_class=HTMLResponse)
@@ -1264,13 +1268,23 @@ def create_app(
         )
         if not selected_regions:
             return _page(
-                request, templates, workspace, (), {"error": "지역을 하나 이상 명시해 주세요."}
+                request,
+                templates,
+                workspace,
+                (),
+                {"error": "지역을 하나 이상 명시해 주세요."},
+                template_name="screening.html",
             )
         overall_start = start or screen_start or ""
         overall_end = end or screen_end or ""
         if not overall_start or not overall_end:
             return _page(
-                request, templates, workspace, (), {"error": "선별 기준 기간을 입력해 주세요."}
+                request,
+                templates,
+                workspace,
+                (),
+                {"error": "선별 기준 기간을 입력해 주세요."},
+                template_name="screening.html",
             )
         try:
             overall = AnalysisPeriod(
@@ -1428,10 +1442,17 @@ def create_app(
             workspace.status = (
                 "screened" if payload["status"] == "complete" else "screening-unavailable"
             )
-            return _page(request, templates, workspace, (), payload)
+            return _page(request, templates, workspace, (), payload, template_name="screening.html")
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             workspace.status = "screening-failed"
-            return _page(request, templates, workspace, (), {"error": str(error)})
+            return _page(
+                request,
+                templates,
+                workspace,
+                (),
+                {"error": str(error)},
+                template_name="screening.html",
+            )
 
     @app.post("/comparison", response_class=HTMLResponse, response_model=None)
     def comparison(
@@ -1586,6 +1607,7 @@ def _page(
     workspace: Workspace,
     candidates: tuple[ApartmentCandidate, ...],
     result: object = None,
+    template_name: str = "index.html",
 ) -> HTMLResponse:
     usage_store: SQLiteStore = request.app.state.usage_store
     usage_counts = usage_store.api_usage_snapshot(
@@ -1620,7 +1642,7 @@ def _page(
     )
     return templates.TemplateResponse(
         request=request,
-        name="index.html",
+        name=template_name,
         context={
             "title": "아파트 거래 분석 | apt-analyzer",
             "workspace": workspace,

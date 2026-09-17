@@ -1457,6 +1457,8 @@ def test_screening_flow_uses_persisted_regional_coverage_and_exports_equivalent_
     assert 'id="price-chart"' not in response.text
     assert "Download equivalent JSON export" not in response.text
     assert "선별 결과" in response.text
+    assert 'href="/"' in response.text
+    assert 'id="analysis-form"' not in response.text
     assert "세대수 JSON" in response.text
     assert "지역 데이터 범위" in response.text
     assert "기준 기간" in response.text
@@ -1479,6 +1481,31 @@ def test_screening_flow_uses_persisted_regional_coverage_and_exports_equivalent_
     assert results["a"]["values"]["transaction_count"] == "1"
     assert results["b"]["included"] is False
     assert "coverage" in results["b"]["unavailable"]
+
+
+def test_screening_has_a_dedicated_page_and_main_workspace_entry_link() -> None:
+    client = TestClient(create_app(store=SQLiteStore(":memory:")))
+    main = client.get("/")
+    assert main.status_code == 200
+    assert '<a class="button secondary" href="/screening">' in main.text
+    assert 'action="/screen"' not in main.text
+    assert 'name="regions"' not in main.text
+    assert "별도 도구" not in main.text
+
+    screening = client.get("/screening")
+    assert screening.status_code == 200
+    assert "지역 아파트 선별" in screening.text
+    assert 'action="/screen"' in screening.text
+    assert 'name="regions"' in screening.text
+    assert "SQLite DB" in screening.text
+    assert '<a class="button secondary" href="/">' in screening.text
+
+    invalid = client.post("/screen", data={"regions": "11"})
+    assert invalid.status_code == 200
+    assert "선별 기준 기간을 입력해 주세요." in invalid.text
+    assert 'href="/"' in invalid.text
+    assert 'role="alert"' in invalid.text
+    assert 'class="alert"' in invalid.text
 
 
 def test_configured_secret_never_reaches_html_or_export(monkeypatch) -> None:
@@ -1834,7 +1861,7 @@ def test_rolling_export_uses_fixed_completed_months_and_keeps_partial_month_evid
 
 def test_screening_structured_controls_cover_supported_metrics_and_infer_units() -> None:
     client = TestClient(create_app(store=SQLiteStore(":memory:")))
-    response = client.get("/")
+    response = client.get("/screening")
     for metric in (
         "median_price_krw",
         "median_area_sqm",
